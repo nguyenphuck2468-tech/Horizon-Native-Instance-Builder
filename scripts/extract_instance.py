@@ -28,11 +28,12 @@ def extract_safe(archive: pathlib.Path, destination: pathlib.Path) -> pathlib.Pa
     seen = set()
     with zipfile.ZipFile(archive) as zf:
         for info in zf.infolist():
-            normalized = info.filename.replace(chr(92), "/")
-            path = pathlib.PurePosixPath(normalized)
-            if (not normalized or normalized.startswith("/") or
+            raw_name = info.filename.replace(chr(92), "/")
+            path = pathlib.PurePosixPath(raw_name)
+            if (not path.parts or raw_name.startswith("/") or "\\x00" in raw_name or
                 ".." in path.parts or (path.parts and ":" in path.parts[0])):
                 raise SystemExit(f"Unsafe ZIP path: {info.filename}")
+            normalized = "/".join(path.parts)
             if normalized in seen:
                 raise SystemExit(f"Duplicate ZIP path after normalization: {info.filename}")
             seen.add(normalized)
