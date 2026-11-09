@@ -76,7 +76,7 @@ def validate_zip(path):
         for item in entries:
             raw_name = item.filename.replace(chr(92), "/")
             parts = pathlib.PurePosixPath(raw_name).parts
-            if (not parts or raw_name.startswith("/") or "\\x00" in raw_name
+            if (not parts or raw_name.startswith("/") or chr(0) in raw_name
                     or ".." in parts or (parts and ":" in parts[0])):
                 raise ValueError(f"Unsafe ZIP path: {item.filename}")
             name = "/".join(parts)
