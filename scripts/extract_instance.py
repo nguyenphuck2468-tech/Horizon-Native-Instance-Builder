@@ -30,7 +30,7 @@ def extract_safe(archive: pathlib.Path, destination: pathlib.Path) -> pathlib.Pa
         for info in zf.infolist():
             raw_name = info.filename.replace(chr(92), "/")
             path = pathlib.PurePosixPath(raw_name)
-            if (not path.parts or raw_name.startswith("/") or "\\x00" in raw_name or
+            if (not path.parts or raw_name.startswith("/") or chr(0) in raw_name or
                 ".." in path.parts or (path.parts and ":" in path.parts[0])):
                 raise SystemExit(f"Unsafe ZIP path: {info.filename}")
             normalized = "/".join(path.parts)
