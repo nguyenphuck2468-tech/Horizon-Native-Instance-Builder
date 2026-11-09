@@ -43,8 +43,23 @@ jobs:
           ASSET: ${{ inputs.instance_asset_name }}
         run: |
           mkdir -p input/instance
-          gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --pattern "$ASSET" --dir input/instance
-          mv "input/instance/$ASSET" input/instance/instance.zip
+          temp_dir="$(mktemp -d)"
+          gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --pattern "$ASSET" --dir "$temp_dir"
+          cp "$temp_dir/$ASSET" input/instance/instance.zip
+      - name: Normalize uploaded instance ZIP filename
+        run: |
+          mkdir -p input/instance
+          if [ ! -f input/instance/instance.zip ]; then
+            if [ -f input/instance/horizon.zip ]; then
+              cp input/instance/horizon.zip input/instance/instance.zip
+              echo "Using input/instance/horizon.zip as the instance archive."
+            else
+              echo "::error::No instance archive found. Upload input/instance/instance.zip or input/instance/horizon.zip, or provide instance_release_tag."
+              echo "Files currently in input/instance:"
+              ls -la input/instance
+              exit 1
+            fi
+          fi
       - name: Validate ZIP instance and native mods
         run: python scripts/prepare.py
       - uses: actions/upload-artifact@v4
