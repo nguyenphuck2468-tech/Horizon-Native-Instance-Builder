@@ -74,11 +74,12 @@ def validate_zip(path):
         names = []
         seen = set()
         for item in entries:
-            name = item.filename.replace(chr(92), "/")
-            parts = pathlib.PurePosixPath(name).parts
-            if (name.startswith("/") or ".." in parts
-                    or (parts and ":" in parts[0])):
+            raw_name = item.filename.replace(chr(92), "/")
+            parts = pathlib.PurePosixPath(raw_name).parts
+            if (not parts or raw_name.startswith("/") or "\\x00" in raw_name
+                    or ".." in parts or (parts and ":" in parts[0])):
                 raise ValueError(f"Unsafe ZIP path: {item.filename}")
+            name = "/".join(parts)
             if name in seen:
                 raise ValueError(f"Duplicate ZIP path after normalization: {item.filename}")
             seen.add(name)
