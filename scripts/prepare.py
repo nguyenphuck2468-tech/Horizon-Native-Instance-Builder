@@ -103,9 +103,9 @@ def main():
     try:
         minecraft_root = discover_minecraft_root(names)
     except ValueError as error:
-        sample = "\\n".join(names[:40])
+        sample = chr(10).join(names[:40])
         raise SystemExit(
-            f"{error}\\nFirst ZIP entries:\\n{sample}"
+            f"{error}{chr(10)}First ZIP entries:{chr(10)}{sample}"
         )
     mods = sorted(p for p in mods_dir.glob("*.hnmod") if p.is_file())
     if not mods:
