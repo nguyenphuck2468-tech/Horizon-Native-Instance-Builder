@@ -1,0 +1,1 @@
+Place a full Minecraft game-directory ZIP here as minecraft.zip. It must contain versions/<version>/<version>.json and matching assets/libraries. This is separate from input/instance/horizon.zip, which is only the Horizon data/instance backup.

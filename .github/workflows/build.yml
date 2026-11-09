@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       horizon_revision:
-        description: "Horizon commit/tag to build against"
+        description: "Horizon launcher source revision in nguyenphuck2468-tech/horizon"
         required: true
         default: "main"
         type: string
@@ -13,9 +13,18 @@ on:
         required: false
         type: string
       instance_asset_name:
-        description: "Release asset filename"
+        description: "Horizon instance ZIP asset filename"
         required: true
         default: "instance.zip"
+        type: string
+      minecraft_release_tag:
+        description: "Release tag containing a full Minecraft game-directory ZIP"
+        required: false
+        type: string
+      minecraft_asset_name:
+        description: "Minecraft game ZIP asset filename"
+        required: true
+        default: "minecraft.zip"
         type: string
 
 permissions:
@@ -46,27 +55,46 @@ jobs:
           temp_dir="$(mktemp -d)"
           gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --pattern "$ASSET" --dir "$temp_dir"
           cp "$temp_dir/$ASSET" input/instance/instance.zip
-      - name: Normalize uploaded instance ZIP filename
+      - name: Normalize uploaded Horizon instance ZIP filename
         run: |
-          mkdir -p input/instance
+          mkdir -p input/instance input/minecraft
           if [ ! -f input/instance/instance.zip ]; then
             if [ -f input/instance/horizon.zip ]; then
               cp input/instance/horizon.zip input/instance/instance.zip
-              echo "Using input/instance/horizon.zip as the instance archive."
+              echo "Using input/instance/horizon.zip as the Horizon instance archive."
             else
-              echo "::error::No instance archive found. Upload input/instance/instance.zip or input/instance/horizon.zip, or provide instance_release_tag."
-              echo "Files currently in input/instance:"
+              echo "::error::No Horizon instance ZIP found. Upload input/instance/instance.zip or input/instance/horizon.zip, or provide instance_release_tag."
               ls -la input/instance
               exit 1
             fi
           fi
-      - name: Validate ZIP instance and native mods
-        run: python scripts/prepare.py
+      - name: Download Minecraft game ZIP from this repository's Release (optional)
+        if: ${{ inputs.minecraft_release_tag != '' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ inputs.minecraft_release_tag }}
+          ASSET: ${{ inputs.minecraft_asset_name }}
+        run: |
+          temp_dir="$(mktemp -d)"
+          gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --pattern "$ASSET" --dir "$temp_dir"
+          cp "$temp_dir/$ASSET" input/minecraft/minecraft.zip
+      - name: Require a separate full Minecraft game ZIP
+        run: |
+          if [ ! -f input/minecraft/minecraft.zip ]; then
+            echo "::error::The Horizon instance backup is not a Minecraft game install. Add input/minecraft/minecraft.zip or provide minecraft_release_tag with a full Minecraft game-directory ZIP."
+            ls -la input/minecraft
+            exit 1
+          fi
+      - name: Test archive validation and extraction
+        run: python -m unittest discover -s tests -v
+      - name: Validate Horizon instance, Minecraft game ZIP and native mods
+        run: python scripts/prepare.py --minecraft input/minecraft/minecraft.zip
       - uses: actions/upload-artifact@v4
         with:
           name: validated-inputs
           path: |
             input/instance/instance.zip
+            input/minecraft/minecraft.zip
             input/mods/*.hnmod
             build-report/input-manifest.json
           if-no-files-found: error
@@ -80,9 +108,14 @@ jobs:
         include:
           - runner: ubuntu-latest
             target: linux-x86_64
+            client: horizon-client
           - runner: windows-latest
             target: windows-x86_64
+            client: horizon-client.exe
     runs-on: ${{ matrix.runner }}
+    env:
+      HORIZON_LAUNCHER_HOME: ${{ github.workspace }}/.horizon-launcher
+      HORIZON_HOME: ${{ github.workspace }}/.horizon-game
     steps:
       - uses: actions/checkout@v4
         with:
@@ -91,45 +124,92 @@ jobs:
         with:
           name: validated-inputs
           path: .
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
       - uses: dtolnay/rust-toolchain@stable
       - name: Install Linux build prerequisites
         if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install -y build-essential pkg-config libssl-dev cmake
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential pkg-config libssl-dev cmake libxkbcommon-dev libwayland-dev libx11-dev libvulkan-dev libasound2-dev
+      - name: Extract the supplied Minecraft game files
+        id: instance
+        shell: bash
+        run: |
+          MINECRAFT_DIR="$(python scripts/extract_instance.py input/minecraft/minecraft.zip --destination input/extracted --print-root)"
+          echo "minecraft_dir=$MINECRAFT_DIR" >> "$GITHUB_OUTPUT"
       - name: Checkout selected Horizon revision
         shell: bash
         env:
           HORIZON_REV: ${{ inputs.horizon_revision }}
         run: |
-          git clone https://github.com/horizon-rust/horizon.git horizon-src
+          git clone https://github.com/nguyenphuck2468-tech/horizon.git horizon-src
           git -C horizon-src checkout --detach "$HORIZON_REV"
           echo "HORIZON_COMMIT=$(git -C horizon-src rev-parse HEAD)" >> "$GITHUB_ENV"
       - name: Build Horizon launcher CLI
         working-directory: horizon-src
         shell: bash
-        run: cargo build --locked --release -p horizon-launcher --bin horizon-launcher
-      - name: Invoke Horizon native builder
+        run: cargo build --manifest-path launcher/Cargo.toml --locked --release --bin horizon-launcher
+      - name: Install and prepare a clean Horizon base
+        shell: bash
+        env:
+          MINECRAFT_DIR: ${{ steps.instance.outputs.minecraft_dir }}
+        run: |
+          if [[ "$RUNNER_OS" == "Windows" ]]; then
+            CLI="horizon-src/launcher/target/release/horizon-launcher.exe"
+          else
+            CLI="horizon-src/launcher/target/release/horizon-launcher"
+          fi
+          "$CLI" install latest
+          "$CLI" prepare --minecraft "$MINECRAFT_DIR"
+      - name: Build native client from trusted mods
         shell: bash
         run: |
-          CLI="horizon-src/target/release/horizon-launcher"
-          if [[ "$RUNNER_OS" == "Windows" ]]; then CLI="horizon-src/target/release/horizon-launcher.exe"; fi
-          "$CLI" native-build input/mods --trust-native-code --profile fast 2>&1 | tee native-build.log
-      - name: Record build facts and candidate outputs
+          if [[ "$RUNNER_OS" == "Windows" ]]; then
+            CLI="horizon-src/launcher/target/release/horizon-launcher.exe"
+          else
+            CLI="horizon-src/launcher/target/release/horizon-launcher"
+          fi
+          set -o pipefail
+          "$CLI" native-build input/mods --trust-native-code --profile performance 2>&1 | tee native-build.log
+      - name: Collect the actual native client and build facts
         if: always()
         shell: bash
+        env:
+          CLIENT: ${{ matrix.client }}
+          TARGET: ${{ matrix.target }}
         run: |
-          mkdir -p "build-report/${{ matrix.target }}"
-          printf 'Horizon commit: %s\\nTarget: %s\\nRunner: %s\\n' "$HORIZON_COMMIT" "${{ matrix.target }}" "$RUNNER_OS" > "build-report/${{ matrix.target }}/build.txt"
-          find horizon-src -type f \\( -name 'horizon-client' -o -name 'horizon-client.exe' -o -name 'native-mods.json' \\) -print > "build-report/${{ matrix.target }}/candidate-files.txt" || true
-          cp native-build.log "build-report/${{ matrix.target }}/" 2>/dev/null || true
+          mkdir -p "native-runtime" "build-report/$TARGET"
+          printf 'Horizon commit: %s\nTarget: %s\nRunner: %s\n' "$HORIZON_COMMIT" "$TARGET" "$RUNNER_OS" > "build-report/$TARGET/build.txt"
+          if [[ -f native-build.log ]]; then
+            cp native-build.log "build-report/$TARGET/"
+          fi
+          DATA_HOME="$HORIZON_LAUNCHER_HOME"
+          if [[ "$RUNNER_OS" == "Windows" ]]; then
+            DATA_HOME="$(cygpath -u "$HORIZON_LAUNCHER_HOME")"
+          fi
+          if [[ -d "$DATA_HOME/versions" ]]; then
+            find "$DATA_HOME/versions" -maxdepth 2 -type f -name "$CLIENT" -print > "build-report/$TARGET/candidate-files.txt"
+            for candidate in "$DATA_HOME"/versions/native-*/"$CLIENT"; do
+              if [[ -f "$candidate" ]]; then
+                cp "$candidate" "native-runtime/$CLIENT"
+                break
+              fi
+            done
+          fi
+          if [[ ! -f "native-runtime/$CLIENT" ]]; then
+            echo "::error::No native client binary was produced. Inspect the native-build log and candidate-files report."
+            exit 1
+          fi
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: native-build-${{ matrix.target }}
           path: |
+            native-runtime/
             build-report/${{ matrix.target }}/
-            horizon-src/native/build.log
-            native-build.log
-          if-no-files-found: warn
+          if-no-files-found: error
           retention-days: 14
 
   preserve-instance:
