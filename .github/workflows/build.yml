@@ -157,9 +157,13 @@ jobs:
           if [[ -f native-build.log ]]; then
             cp native-build.log "build-report/$TARGET/"
           fi
-          if [[ -d "$HORIZON_LAUNCHER_HOME/versions" ]]; then
-            find "$HORIZON_LAUNCHER_HOME/versions" -maxdepth 2 -type f -name "$CLIENT" -print > "build-report/$TARGET/candidate-files.txt"
-            for candidate in "$HORIZON_LAUNCHER_HOME"/versions/native-*/"$CLIENT"; do
+          DATA_HOME="$HORIZON_LAUNCHER_HOME"
+          if [[ "$RUNNER_OS" == "Windows" ]]; then
+            DATA_HOME="$(cygpath -u "$HORIZON_LAUNCHER_HOME")"
+          fi
+          if [[ -d "$DATA_HOME/versions" ]]; then
+            find "$DATA_HOME/versions" -maxdepth 2 -type f -name "$CLIENT" -print > "build-report/$TARGET/candidate-files.txt"
+            for candidate in "$DATA_HOME"/versions/native-*/"$CLIENT"; do
               if [[ -f "$candidate" ]]; then
                 cp "$candidate" "native-runtime/$CLIENT"
                 break
