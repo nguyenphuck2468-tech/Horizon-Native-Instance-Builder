@@ -1,0 +1,33 @@
+name: Validate Builder Inputs
+
+on:
+  push:
+    paths:
+      - "scripts/**"
+      - "tests/**"
+      - "input/**"
+      - ".github/workflows/**"
+  pull_request:
+    paths:
+      - "scripts/**"
+      - "tests/**"
+      - "input/**"
+      - ".github/workflows/**"
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Test archive validation and extraction
+        run: python -m unittest discover -s tests -v
+      - name: Validate supplied ZIP and native mods
+        run: python scripts/prepare.py
