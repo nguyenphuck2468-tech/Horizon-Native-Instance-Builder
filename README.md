@@ -1,21 +1,22 @@
 # Horizon Native Instance Builder
 
-A forkable GitHub Actions project. The **instance input is a ZIP** (`instance.zip`); native mods are one or more `.hnmod` files.
+A forkable GitHub Actions project. The **instance input is a ZIP**; native mods are one or more `.hnmod` files.
 
 ## Input layout
 
 ```text
 input/
   instance/
-    instance.zip
+    instance.zip   # preferred name
+    horizon.zip    # also accepted; workflow normalizes it to instance.zip
   mods/
     mod-one.hnmod
     mod-two.hnmod
 ```
 
-Fork this repository, put your exported Horizon instance ZIP at `input/instance/instance.zip`, and put trusted `.hnmod` files in `input/mods/`. Then run **Actions → Build Horizon Native Instance → Run workflow**.
+Put your exported Horizon instance ZIP at `input/instance/instance.zip` or `input/instance/horizon.zip`, and put trusted `.hnmod` files in `input/mods/`. Then run **Actions → Build Horizon Native Instance → Run workflow**.
 
-For a large instance, publish `instance.zip` as a Release asset in this same repository and supply its tag in the workflow form. This avoids putting large world data in Git history.
+For a large instance, publish the ZIP as a Release asset in this same repository and supply its tag and asset filename in the workflow form. This avoids putting large world data in Git history. If a release tag is supplied, that release asset takes precedence and is copied to the canonical `instance.zip` input path.
 
 ## Important distinction
 
