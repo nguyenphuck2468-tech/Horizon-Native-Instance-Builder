@@ -13,9 +13,18 @@ on:
         required: false
         type: string
       instance_asset_name:
-        description: "Release asset filename"
+        description: "Horizon instance ZIP asset filename"
         required: true
         default: "instance.zip"
+        type: string
+      minecraft_release_tag:
+        description: "Release tag containing a full Minecraft game-directory ZIP"
+        required: false
+        type: string
+      minecraft_asset_name:
+        description: "Minecraft game ZIP asset filename"
+        required: true
+        default: "minecraft.zip"
         type: string
 
 permissions:
@@ -46,29 +55,46 @@ jobs:
           temp_dir="$(mktemp -d)"
           gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --pattern "$ASSET" --dir "$temp_dir"
           cp "$temp_dir/$ASSET" input/instance/instance.zip
-      - name: Normalize uploaded instance ZIP filename
+      - name: Normalize uploaded Horizon instance ZIP filename
         run: |
-          mkdir -p input/instance
+          mkdir -p input/instance input/minecraft
           if [ ! -f input/instance/instance.zip ]; then
             if [ -f input/instance/horizon.zip ]; then
               cp input/instance/horizon.zip input/instance/instance.zip
-              echo "Using input/instance/horizon.zip as the instance archive."
+              echo "Using input/instance/horizon.zip as the Horizon instance archive."
             else
-              echo "::error::No instance archive found. Upload input/instance/instance.zip or input/instance/horizon.zip, or provide instance_release_tag."
-              echo "Files currently in input/instance:"
+              echo "::error::No Horizon instance ZIP found. Upload input/instance/instance.zip or input/instance/horizon.zip, or provide instance_release_tag."
               ls -la input/instance
               exit 1
             fi
           fi
+      - name: Download Minecraft game ZIP from this repository's Release (optional)
+        if: ${{ inputs.minecraft_release_tag != '' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ inputs.minecraft_release_tag }}
+          ASSET: ${{ inputs.minecraft_asset_name }}
+        run: |
+          temp_dir="$(mktemp -d)"
+          gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --pattern "$ASSET" --dir "$temp_dir"
+          cp "$temp_dir/$ASSET" input/minecraft/minecraft.zip
+      - name: Require a separate full Minecraft game ZIP
+        run: |
+          if [ ! -f input/minecraft/minecraft.zip ]; then
+            echo "::error::The Horizon instance backup is not a Minecraft game install. Add input/minecraft/minecraft.zip or provide minecraft_release_tag with a full Minecraft game-directory ZIP."
+            ls -la input/minecraft
+            exit 1
+          fi
       - name: Test archive validation and extraction
         run: python -m unittest discover -s tests -v
-      - name: Validate ZIP, Minecraft game layout and native mods
-        run: python scripts/prepare.py
+      - name: Validate Horizon instance, Minecraft game ZIP and native mods
+        run: python scripts/prepare.py --minecraft input/minecraft/minecraft.zip
       - uses: actions/upload-artifact@v4
         with:
           name: validated-inputs
           path: |
             input/instance/instance.zip
+            input/minecraft/minecraft.zip
             input/mods/*.hnmod
             build-report/input-manifest.json
           if-no-files-found: error
@@ -111,7 +137,7 @@ jobs:
         id: instance
         shell: bash
         run: |
-          MINECRAFT_DIR="$(python scripts/extract_instance.py input/instance/instance.zip --destination input/extracted --print-root)"
+          MINECRAFT_DIR="$(python scripts/extract_instance.py input/minecraft/minecraft.zip --destination input/extracted --print-root)"
           echo "minecraft_dir=$MINECRAFT_DIR" >> "$GITHUB_OUTPUT"
       - name: Checkout selected Horizon revision
         shell: bash
