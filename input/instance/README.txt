@@ -1,0 +1,1 @@
+Place your real exported Horizon instance ZIP here, named instance.zip. Do not unpack it.
