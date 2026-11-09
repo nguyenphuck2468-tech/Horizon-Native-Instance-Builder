@@ -7,6 +7,7 @@ import zipfile
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 DEFAULT_INSTANCE = ROOT / "input/instance/instance.zip"
+DEFAULT_MINECRAFT = ROOT / "input/minecraft/minecraft.zip"
 DEFAULT_MODS = ROOT / "input/mods"
 REPORT = ROOT / "build-report"
 
@@ -33,9 +34,9 @@ def discover_minecraft_root(names):
                 candidates.add("/".join(parts[:index]))
     if not candidates:
         raise ValueError(
-            "Instance ZIP must contain a complete Minecraft game directory with "
-            "versions/<version>/<version>.json. A Modrinth/CurseForge manifest-only "
-            "export is not enough to prepare a native build."
+            "Minecraft ZIP must contain a complete game directory with "
+            "versions/<version>/<version>.json. A Horizon data backup or "
+            "Modrinth/CurseForge manifest-only export is not a Minecraft game archive."
         )
     ranked = sorted(
         candidates,
@@ -58,7 +59,7 @@ def discover_minecraft_root(names):
         ]
         if counts[0] == counts[1]:
             raise ValueError(
-                "Instance ZIP contains multiple equally plausible Minecraft roots; "
+                "Minecraft ZIP contains multiple equally plausible game roots; "
                 "export one game directory per ZIP."
             )
     return ranked[0] or "."
@@ -93,20 +94,14 @@ def validate_zip(path):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--instance", default=str(DEFAULT_INSTANCE))
+    ap.add_argument("--minecraft", help="Optional full Minecraft game-directory ZIP")
     ap.add_argument("--mods", default=str(DEFAULT_MODS))
     args = ap.parse_args()
     instance = pathlib.Path(args.instance)
     mods_dir = pathlib.Path(args.mods)
     if not instance.is_file():
-        raise SystemExit(f"Missing instance ZIP: {instance}")
-    count, names = validate_zip(instance)
-    try:
-        minecraft_root = discover_minecraft_root(names)
-    except ValueError as error:
-        sample = chr(10).join(names[:40])
-        raise SystemExit(
-            f"{error}{chr(10)}First ZIP entries:{chr(10)}{sample}"
-        )
+        raise SystemExit(f"Missing Horizon instance ZIP: {instance}")
+    count, _ = validate_zip(instance)
     mods = sorted(p for p in mods_dir.glob("*.hnmod") if p.is_file())
     if not mods:
         raise SystemExit(f"No .hnmod files found in {mods_dir}")
@@ -122,21 +117,39 @@ def main():
             "bytes": mod.stat().st_size,
             "sha256": digest(mod),
         })
-    REPORT.mkdir(parents=True, exist_ok=True)
     manifest = {
-        "schema": 2,
+        "schema": 3,
         "instance": {
             "file": instance.name,
             "bytes": instance.stat().st_size,
             "sha256": digest(instance),
             "zip_entries": count,
-            "minecraft_root": minecraft_root,
+            "preserved_unchanged": True,
         },
         "mods": records,
-        "instance_zip_is_preserved_unchanged": True,
     }
+    if args.minecraft:
+        minecraft = pathlib.Path(args.minecraft)
+        if not minecraft.is_file():
+            raise SystemExit(f"Missing Minecraft game ZIP: {minecraft}")
+        try:
+            minecraft_count, minecraft_names = validate_zip(minecraft)
+            minecraft_root = discover_minecraft_root(minecraft_names)
+        except ValueError as error:
+            sample = chr(10).join(minecraft_names[:40]) if "minecraft_names" in locals() else ""
+            raise SystemExit(
+                f"{error}{chr(10)}First Minecraft ZIP entries:{chr(10)}{sample}"
+            )
+        manifest["minecraft"] = {
+            "file": minecraft.name,
+            "bytes": minecraft.stat().st_size,
+            "sha256": digest(minecraft),
+            "zip_entries": minecraft_count,
+            "minecraft_root": minecraft_root,
+        }
+    REPORT.mkdir(parents=True, exist_ok=True)
     (REPORT / "input-manifest.json").write_text(
-        json.dumps(manifest, indent=2) + "\n", encoding="utf-8"
+        json.dumps(manifest, indent=2) + chr(10), encoding="utf-8"
     )
     print(json.dumps(manifest, indent=2))
 
