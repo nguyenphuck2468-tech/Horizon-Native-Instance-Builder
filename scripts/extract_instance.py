@@ -28,7 +28,7 @@ def extract_safe(archive: pathlib.Path, destination: pathlib.Path) -> pathlib.Pa
     seen = set()
     with zipfile.ZipFile(archive) as zf:
         for info in zf.infolist():
-            normalized = info.filename.replace("\\\\", "/")
+            normalized = info.filename.replace(chr(92), "/")
             path = pathlib.PurePosixPath(normalized)
             if (not normalized or normalized.startswith("/") or
                 ".." in path.parts or (path.parts and ":" in path.parts[0])):
