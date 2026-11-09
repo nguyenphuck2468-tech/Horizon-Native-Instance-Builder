@@ -35,7 +35,11 @@ jobs:
             if [ ! -f input/instance/instance.zip ]; then
               cp input/instance/horizon.zip input/instance/instance.zip
             fi
-            python scripts/prepare.py
+            if [ -f input/minecraft/minecraft.zip ]; then
+              python scripts/prepare.py --minecraft input/minecraft/minecraft.zip
+            else
+              python scripts/prepare.py
+            fi
           else
             echo "::notice::No instance ZIP is checked into this repository; full input validation runs when the manual build receives its ZIP or Release asset."
           fi
