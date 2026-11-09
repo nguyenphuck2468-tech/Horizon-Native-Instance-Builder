@@ -29,5 +29,13 @@ jobs:
           python-version: "3.12"
       - name: Test archive validation and extraction
         run: python -m unittest discover -s tests -v
-      - name: Validate supplied ZIP and native mods
-        run: python scripts/prepare.py
+      - name: Validate supplied ZIP and native mods when present
+        run: |
+          if [ -f input/instance/instance.zip ] || [ -f input/instance/horizon.zip ]; then
+            if [ ! -f input/instance/instance.zip ]; then
+              cp input/instance/horizon.zip input/instance/instance.zip
+            fi
+            python scripts/prepare.py
+          else
+            echo "::notice::No instance ZIP is checked into this repository; full input validation runs when the manual build receives its ZIP or Release asset."
+          fi
