@@ -1,0 +1,133 @@
+name: Build Horizon Native Instance
+
+on:
+  workflow_dispatch:
+    inputs:
+      horizon_revision:
+        description: "Horizon commit/tag to build against"
+        required: true
+        default: "main"
+        type: string
+      instance_release_tag:
+        description: "Optional release tag in THIS repository containing the instance ZIP"
+        required: false
+        type: string
+      instance_asset_name:
+        description: "Release asset filename"
+        required: true
+        default: "instance.zip"
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: horizon-native-${{ github.ref }}-${{ github.run_id }}
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Download instance from this repository's Release (optional)
+        if: ${{ inputs.instance_release_tag != '' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ inputs.instance_release_tag }}
+          ASSET: ${{ inputs.instance_asset_name }}
+        run: |
+          mkdir -p input/instance
+          gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --pattern "$ASSET" --dir input/instance
+          mv "input/instance/$ASSET" input/instance/instance.zip
+      - name: Validate ZIP instance and native mods
+        run: python scripts/prepare.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: validated-inputs
+          path: |
+            input/instance/instance.zip
+            input/mods/*.hnmod
+            build-report/input-manifest.json
+          if-no-files-found: error
+          retention-days: 7
+
+  native-build:
+    needs: validate
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-latest
+            target: linux-x86_64
+          - runner: windows-latest
+            target: windows-x86_64
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@v4
+        with:
+          name: validated-inputs
+          path: .
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Install Linux build prerequisites
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y build-essential pkg-config libssl-dev cmake
+      - name: Checkout selected Horizon revision
+        shell: bash
+        env:
+          HORIZON_REV: ${{ inputs.horizon_revision }}
+        run: |
+          git clone https://github.com/horizon-rust/horizon.git horizon-src
+          git -C horizon-src checkout --detach "$HORIZON_REV"
+          echo "HORIZON_COMMIT=$(git -C horizon-src rev-parse HEAD)" >> "$GITHUB_ENV"
+      - name: Build Horizon launcher CLI
+        working-directory: horizon-src
+        shell: bash
+        run: cargo build --locked --release -p horizon-launcher --bin horizon-launcher
+      - name: Invoke Horizon native builder
+        shell: bash
+        run: |
+          CLI="horizon-src/target/release/horizon-launcher"
+          if [[ "$RUNNER_OS" == "Windows" ]]; then CLI="horizon-src/target/release/horizon-launcher.exe"; fi
+          "$CLI" native-build input/mods --trust-native-code --profile fast 2>&1 | tee native-build.log
+      - name: Record build facts and candidate outputs
+        if: always()
+        shell: bash
+        run: |
+          mkdir -p "build-report/${{ matrix.target }}"
+          printf 'Horizon commit: %s\\nTarget: %s\\nRunner: %s\\n' "$HORIZON_COMMIT" "${{ matrix.target }}" "$RUNNER_OS" > "build-report/${{ matrix.target }}/build.txt"
+          find horizon-src -type f \\( -name 'horizon-client' -o -name 'horizon-client.exe' -o -name 'native-mods.json' \\) -print > "build-report/${{ matrix.target }}/candidate-files.txt" || true
+          cp native-build.log "build-report/${{ matrix.target }}/" 2>/dev/null || true
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: native-build-${{ matrix.target }}
+          path: |
+            build-report/${{ matrix.target }}/
+            horizon-src/native/build.log
+            native-build.log
+          if-no-files-found: warn
+          retention-days: 14
+
+  preserve-instance:
+    needs: validate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: validated-inputs
+          path: .
+      - uses: actions/upload-artifact@v4
+        with:
+          name: horizon-instance-zip
+          path: input/instance/instance.zip
+          if-no-files-found: error
+          retention-days: 30
