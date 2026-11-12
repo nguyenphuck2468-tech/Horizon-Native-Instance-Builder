@@ -279,7 +279,7 @@ class InstanceArchiveTests(unittest.TestCase):
             with self.assertRaisesRegex(SystemExit, "Unsafe ZIP path"):
                 extract_safe(archive, destination)
             self.assertFalse(destination.exists())
-            self.assertFalse((root.parent / "outside.txt").exists())
+            self.assertFalse((root / "outside.txt").exists())
 
     def test_extractor_rejects_symlink_entries(self):
         with tempfile.TemporaryDirectory() as temp:
