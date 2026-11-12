@@ -65,6 +65,38 @@ def discover_minecraft_root(names):
     return ranked[0] or "."
 
 
+def validate_minecraft_layout(names):
+    """Require the game files the native preparer actually consumes."""
+    root = discover_minecraft_root(names)
+    prefix = "" if root == "." else root.rstrip("/") + "/"
+    scoped = {
+        name[len(prefix):]
+        for name in names
+        if name.startswith(prefix)
+    }
+    versions = set()
+    for name in scoped:
+        parts = pathlib.PurePosixPath(name).parts
+        if (len(parts) == 3 and parts[0] == "versions"
+                and parts[2] == parts[1] + ".json"):
+            versions.add(parts[1])
+    if not versions:
+        raise ValueError("Minecraft game root has no versions/<version>/<version>.json metadata.")
+    missing = []
+    if not any(name.startswith("assets/indexes/") and name.endswith(".json") for name in scoped):
+        missing.append("assets/indexes/*.json")
+    if not any(name.startswith("assets/objects/") for name in scoped):
+        missing.append("assets/objects/")
+    if not any(name.startswith("libraries/") for name in scoped):
+        missing.append("libraries/")
+    if missing:
+        raise ValueError(
+            "Minecraft ZIP is incomplete; missing " + ", ".join(missing)
+            + ". Supply a full game directory, not only version metadata or a launcher backup."
+        )
+    return root
+
+
 def validate_zip(path):
     if not zipfile.is_zipfile(path):
         raise ValueError(f"Not a ZIP archive: {path}")
@@ -134,7 +166,7 @@ def main():
             raise SystemExit(f"Missing Minecraft game ZIP: {minecraft}")
         try:
             minecraft_count, minecraft_names = validate_zip(minecraft)
-            minecraft_root = discover_minecraft_root(minecraft_names)
+            minecraft_root = validate_minecraft_layout(minecraft_names)
         except ValueError as error:
             sample = chr(10).join(minecraft_names[:40]) if "minecraft_names" in locals() else ""
             raise SystemExit(
