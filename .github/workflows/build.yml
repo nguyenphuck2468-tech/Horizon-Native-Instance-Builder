@@ -97,7 +97,7 @@ jobs:
           git -C horizon-revision fetch --depth=1 origin "$HORIZON_REV"
           HORIZON_COMMIT="$(git -C horizon-revision rev-parse 'FETCH_HEAD^{commit}')"
           mkdir -p build-report
-          printf '%s\\n' "$HORIZON_COMMIT" > build-report/horizon-commit.txt
+          printf '%s\n' "$HORIZON_COMMIT" > build-report/horizon-commit.txt
           echo "Resolved Horizon revision: $HORIZON_COMMIT"
       - uses: actions/upload-artifact@v4
         with:
