@@ -2,6 +2,7 @@
 """Safely unpack a Minecraft game folder from the supplied instance ZIP."""
 import argparse
 import pathlib
+import unicodedata
 import zipfile
 
 MAX_ARCHIVE_ENTRIES = 100_000
@@ -26,6 +27,12 @@ def _portable_windows_component(part):
         and stem not in WINDOWS_RESERVED_NAMES
     )
 
+
+
+def _collision_key(value):
+    """Normalize canonical Unicode equivalents before case-insensitive comparison."""
+    normalized = unicodedata.normalize("NFC", value)
+    return unicodedata.normalize("NFC", normalized.casefold())
 
 
 def find_minecraft_root(root: pathlib.Path) -> pathlib.Path:
@@ -94,12 +101,12 @@ def extract_safe(archive: pathlib.Path, destination: pathlib.Path) -> pathlib.Pa
             normalized = "/".join(path.parts)
             if normalized in seen:
                 raise SystemExit(f"Duplicate ZIP path after normalization: {info.filename}")
-            folded = normalized.casefold()
+            folded = _collision_key(normalized)
             if folded in seen_casefold:
                 raise SystemExit(f"Case-insensitive ZIP path collision: {info.filename}")
             parents = ["/".join(path.parts[:index]) for index in range(1, len(path.parts))]
             conflicting_parent = next(
-                (parent.casefold() for parent in parents if parent.casefold() in files_casefold),
+                (_collision_key(parent) for parent in parents if parent.casefold() in files_casefold),
                 None,
             )
             if conflicting_parent is not None:
