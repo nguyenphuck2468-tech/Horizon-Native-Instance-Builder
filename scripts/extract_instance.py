@@ -54,7 +54,8 @@ def find_minecraft_root(root: pathlib.Path) -> pathlib.Path:
     return ranked[0]
 
 def extract_safe(archive: pathlib.Path, destination: pathlib.Path) -> pathlib.Path:
-    destination.mkdir(parents=True, exist_ok=True)
+    # Resolve without creating the destination. An invalid archive must not leave
+    # even an empty output directory behind.
     root = destination.resolve()
     seen = set()
     seen_casefold = set()
@@ -136,6 +137,10 @@ def extract_safe(archive: pathlib.Path, destination: pathlib.Path) -> pathlib.Pa
             if not is_directory:
                 files_casefold.add(folded)
             validated_entries.append((info, path, is_directory))
+
+        # Only create the output directory after every archive entry has passed preflight.
+        destination.mkdir(parents=True, exist_ok=True)
+        root = destination.resolve()
 
         for info, path, is_directory in validated_entries:
             target = root.joinpath(*path.parts)
