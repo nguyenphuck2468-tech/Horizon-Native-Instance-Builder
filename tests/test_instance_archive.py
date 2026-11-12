@@ -311,6 +311,53 @@ class InstanceArchiveTests(unittest.TestCase):
                 with self.assertRaisesRegex(SystemExit, "too many entries"):
                     extract_safe(archive, root / "out")
 
+    def test_extractor_preflights_all_entries_before_writing(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = pathlib.Path(temp)
+            archive = root / "late-unsafe.zip"
+            destination = root / "out"
+            with zipfile.ZipFile(archive, "w") as zf:
+                zf.writestr("game/safe.txt", b"safe")
+                zf.writestr("../outside.txt", b"unsafe")
+            with self.assertRaisesRegex(SystemExit, "Unsafe ZIP path"):
+                extract_safe(archive, destination)
+            self.assertFalse((destination / "game" / "safe.txt").exists())
+
+    def test_extractor_rejects_existing_symlink_inside_destination(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = pathlib.Path(temp)
+            archive = root / "symlink-parent.zip"
+            destination = root / "out"
+            destination.mkdir()
+            (destination / "real").mkdir()
+            (destination / "game").symlink_to(destination / "real", target_is_directory=True)
+            with zipfile.ZipFile(archive, "w") as zf:
+                zf.writestr("game/payload.txt", b"must not follow symlink")
+            with self.assertRaisesRegex(SystemExit, "Existing symlink"):
+                extract_safe(archive, destination)
+            self.assertFalse((destination / "real" / "payload.txt").exists())
+
+    def test_extractor_refuses_encrypted_entries(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = pathlib.Path(temp)
+            archive = root / "encrypted.zip"
+            with zipfile.ZipFile(archive, "w") as zf:
+                info = zipfile.ZipInfo("game/payload.txt")
+                info.flag_bits |= 0x1
+                zf.writestr(info, b"encrypted")
+            # ZIP writers may normalize unsupported encryption flags. Exercise the validator
+            # through a patched ZipInfo flag to keep this test independent of a crypto backend.
+            original = zipfile.ZipFile.infolist
+
+            def encrypted_infolist(zf):
+                entries = original(zf)
+                entries[0].flag_bits |= 0x1
+                return entries
+
+            with patch.object(zipfile.ZipFile, "infolist", encrypted_infolist):
+                with self.assertRaisesRegex(SystemExit, "Encrypted ZIP entry"):
+                    extract_safe(archive, root / "out")
+
     def test_extracts_game_folder_without_changing_archive(self):
         with tempfile.TemporaryDirectory() as temp:
             root = pathlib.Path(temp)
