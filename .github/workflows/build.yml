@@ -228,6 +228,42 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
+
+  verify-native-artifacts:
+    needs: [validate, native-build]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Download the pinned inputs and platform artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: "native-build-*"
+          path: verified
+          merge-multiple: false
+      - name: Download validated input manifest
+        uses: actions/download-artifact@v4
+        with:
+          name: validated-inputs
+          path: verified/inputs
+      - name: Verify both binaries use the same pinned Horizon revision
+        run: |
+          python scripts/verify_native_artifacts.py \
+            --inputs verified/inputs \
+            --linux verified/native-build-linux-x86_64 \
+            --windows verified/native-build-windows-x86_64 \
+            --output build-report/native-build-verification.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: native-build-verification
+          path: build-report/native-build-verification.json
+          if-no-files-found: error
+          retention-days: 30
+
   preserve-instance:
     needs: validate
     runs-on: ubuntu-latest
