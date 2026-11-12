@@ -143,11 +143,16 @@ def extract_safe(archive: pathlib.Path, destination: pathlib.Path) -> pathlib.Pa
             validated_entries.append((info, path, is_directory))
 
         # Only create the output directory after every archive entry has passed preflight.
+        destination_missing = []
+        current = destination.absolute()
+        while current != current.parent and not current.exists():
+            destination_missing.append(current)
+            current = current.parent
         destination.mkdir(parents=True, exist_ok=True)
         root = destination.resolve()
 
         created_files = []
-        created_directories = []
+        created_directories = list(reversed(destination_missing))
 
         def ensure_directory(path):
             missing = []
