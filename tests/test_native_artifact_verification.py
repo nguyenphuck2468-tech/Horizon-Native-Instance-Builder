@@ -1,10 +1,8 @@
-import json
 import tempfile
 import unittest
 from pathlib import Path
 
 from scripts.verify_native_artifacts import verify_artifacts
-
 
 class NativeArtifactVerificationTests(unittest.TestCase):
     def _fixture(self, root: Path, commit: str = "a" * 40):
@@ -64,7 +62,6 @@ class NativeArtifactVerificationTests(unittest.TestCase):
             inputs, linux, windows = self._fixture(Path(temp), "main")
             with self.assertRaisesRegex(ValueError, "full 40-character SHA-1"):
                 verify_artifacts(inputs, linux, windows)
-
 
 if __name__ == "__main__":
     unittest.main()
