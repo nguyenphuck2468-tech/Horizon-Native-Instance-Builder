@@ -273,6 +273,8 @@ def validate_zip(path):
             )
         total_uncompressed = 0
         for item in entries:
+            if item.flag_bits & 0x1:
+                raise ValueError(f"Encrypted ZIP entry refused: {item.filename}")
             if item.is_dir():
                 continue
             if item.file_size < 0 or item.file_size > MAX_MEMBER_UNCOMPRESSED_BYTES:
