@@ -65,7 +65,7 @@ class NativeArtifactVerificationTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp:
             inputs, linux, windows = self._fixture(Path(temp))
             binary = linux / "native-runtime" / "horizon-client"
-            binary.write_bytes(b"not-an-ELF-binary".ljust(64, b"\\x00"))
+            binary.write_bytes(b"not-an-ELF-binary".ljust(64, b"\x00"))
             with self.assertRaisesRegex(ValueError, "not an ELF executable"):
                 verify_artifacts(inputs, linux, windows)
 
