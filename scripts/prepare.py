@@ -127,40 +127,54 @@ def validate_minecraft_archive(path, names):
             and len(pathlib.PurePosixPath(name[len(prefix):]).parts) == 3
             and name.endswith(".json")
         )
-        matching_indexes = []
+        matching_indexes = set()
         for version_file in version_files:
-            metadata = read_json(version_file[len(prefix):], 4 * 1024 * 1024)
-            asset_index = metadata.get("assetIndex") if isinstance(metadata, dict) else None
+            relative_version = version_file[len(prefix):]
+            version_parts = pathlib.PurePosixPath(relative_version).parts
+            if len(version_parts) != 3 or version_parts[2] != version_parts[1] + ".json":
+                continue
+            metadata = read_json(relative_version, 4 * 1024 * 1024)
+            if not isinstance(metadata, dict):
+                raise ValueError(f"Minecraft version metadata is not an object: {relative_version}.")
+            asset_index = metadata.get("assetIndex")
             index_id = asset_index.get("id") if isinstance(asset_index, dict) else None
-            if isinstance(index_id, str) and index_id and "/" not in index_id and "\\\\" not in index_id:
-                index_path = f"assets/indexes/{index_id}.json"
-                if prefix + index_path in entries:
-                    matching_indexes.append(index_path)
+            if (not isinstance(index_id, str) or not index_id
+                    or "/" in index_id or "\\" in index_id or index_id in {".", ".."}):
+                raise ValueError(f"Minecraft version metadata has an invalid asset index id: {relative_version}.")
+            index_path = f"assets/indexes/{index_id}.json"
+            if prefix + index_path not in entries:
+                raise ValueError(
+                    f"Minecraft version metadata references a missing asset index: {index_path}."
+                )
+            matching_indexes.add(index_path)
         if not matching_indexes:
             raise ValueError(
                 "Minecraft version metadata does not reference an included assets/indexes/<id>.json file."
             )
 
-        index = read_json(matching_indexes[0], 32 * 1024 * 1024)
-        objects = index.get("objects") if isinstance(index, dict) else None
-        if not isinstance(objects, dict) or not objects:
-            raise ValueError("Minecraft asset index has no asset objects.")
-        missing_objects = []
-        for logical_name, record in objects.items():
-            sha1 = record.get("hash") if isinstance(record, dict) else None
-            if not isinstance(sha1, str) or len(sha1) != 40 or any(c not in "0123456789abcdefABCDEF" for c in sha1):
-                raise ValueError(f"Minecraft asset index contains an invalid SHA-1 for {logical_name}.")
-            object_path = f"assets/objects/{sha1[:2].lower()}/{sha1.lower()}"
-            info = entries.get(prefix + object_path)
-            if info is None or info.file_size <= 0:
-                missing_objects.append(object_path)
-                if len(missing_objects) == 5:
-                    break
-        if missing_objects:
-            raise ValueError(
-                "Minecraft ZIP is missing asset objects referenced by its index: "
-                + ", ".join(missing_objects)
-            )
+        # A ZIP may contain several game versions. Validate every distinct index they reference,
+        # not just the first one, or an incomplete secondary version could pass preparation.
+        for index_path in sorted(matching_indexes):
+            index = read_json(index_path, 32 * 1024 * 1024)
+            objects = index.get("objects") if isinstance(index, dict) else None
+            if not isinstance(objects, dict) or not objects:
+                raise ValueError(f"Minecraft asset index has no asset objects: {index_path}.")
+            missing_objects = []
+            for logical_name, record in objects.items():
+                sha1 = record.get("hash") if isinstance(record, dict) else None
+                if not isinstance(sha1, str) or len(sha1) != 40 or any(c not in "0123456789abcdefABCDEF" for c in sha1):
+                    raise ValueError(f"Minecraft asset index contains an invalid SHA-1 for {logical_name}.")
+                object_path = f"assets/objects/{sha1[:2].lower()}/{sha1.lower()}"
+                info = entries.get(prefix + object_path)
+                if info is None or info.file_size <= 0:
+                    missing_objects.append(object_path)
+                    if len(missing_objects) == 5:
+                        break
+            if missing_objects:
+                raise ValueError(
+                    f"Minecraft ZIP is missing asset objects referenced by {index_path}: "
+                    + ", ".join(missing_objects)
+                )
 
         if not any(
             name.startswith(prefix + "libraries/") and name.lower().endswith(".jar")
