@@ -359,6 +359,7 @@ class InstanceArchiveTests(unittest.TestCase):
                 zf.writestr("../outside.txt", b"unsafe")
             with self.assertRaisesRegex(SystemExit, "Unsafe ZIP path"):
                 extract_safe(archive, destination)
+            self.assertFalse(destination.exists())
             self.assertFalse((destination / "game" / "safe.txt").exists())
 
     def test_extractor_rejects_existing_symlink_inside_destination(self):
