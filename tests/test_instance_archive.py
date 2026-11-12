@@ -269,6 +269,32 @@ class InstanceArchiveTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "Unsafe ZIP path"):
                 validate_zip(archive)
 
+    def test_extractor_rejects_path_traversal_before_creating_destination(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = pathlib.Path(temp)
+            archive = root / "unsafe.zip"
+            destination = root / "out"
+            with zipfile.ZipFile(archive, "w") as zf:
+                zf.writestr("../outside.txt", "no")
+            with self.assertRaisesRegex(SystemExit, "Unsafe ZIP path"):
+                extract_safe(archive, destination)
+            self.assertFalse(destination.exists())
+            self.assertFalse((root.parent / "outside.txt").exists())
+
+    def test_extractor_rejects_symlink_entries(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = pathlib.Path(temp)
+            archive = root / "link.zip"
+            destination = root / "out"
+            info = zipfile.ZipInfo("game/link")
+            info.create_system = 3
+            info.external_attr = (0o120777 << 16)
+            with zipfile.ZipFile(archive, "w") as zf:
+                zf.writestr(info, "target")
+            with self.assertRaisesRegex(SystemExit, "Symlink entry refused"):
+                extract_safe(archive, destination)
+            self.assertFalse(destination.exists())
+
     def test_rejects_symlink_entries(self):
         with tempfile.TemporaryDirectory() as temp:
             archive = pathlib.Path(temp) / "link.zip"
