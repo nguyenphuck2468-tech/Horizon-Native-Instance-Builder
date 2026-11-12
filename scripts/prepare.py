@@ -14,6 +14,26 @@ MAX_ARCHIVE_ENTRIES = 100_000
 MAX_MEMBER_UNCOMPRESSED_BYTES = 2 * 1024**3
 MAX_TOTAL_UNCOMPRESSED_BYTES = 8 * 1024**3
 
+WINDOWS_RESERVED_NAMES = {
+    "CON", "PRN", "AUX", "NUL",
+    *(f"COM{number}" for number in range(1, 10)),
+    *(f"LPT{number}" for number in range(1, 10)),
+    "COM¹", "COM²", "COM³", "LPT¹", "LPT²", "LPT³",
+}
+
+
+def _portable_windows_component(part):
+    """Reject names that alias devices or alternate streams on Windows."""
+    stem = part.split(".", 1)[0].upper()
+    return (
+        bool(part)
+        and not part.endswith((" ", "."))
+        and not any(ord(char) < 32 or char in '<>:"|?*' for char in part)
+        and stem not in WINDOWS_RESERVED_NAMES
+    )
+
+
+
 
 def digest(path):
     h = hashlib.sha256()
@@ -267,7 +287,7 @@ def validate_zip(path):
             raw_name = item.filename.replace(chr(92), "/")
             parts = pathlib.PurePosixPath(raw_name).parts
             if (not parts or raw_name.startswith("/") or chr(0) in raw_name
-                    or ".." in parts or (parts and ":" in parts[0])):
+                    or ".." in parts or any(not _portable_windows_component(part) for part in parts)):
                 raise ValueError(f"Unsafe ZIP path: {item.filename}")
             name = "/".join(parts)
             if name in seen:
