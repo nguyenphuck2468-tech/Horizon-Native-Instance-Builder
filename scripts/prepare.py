@@ -136,6 +136,37 @@ def validate_minecraft_archive(path, names):
             metadata = read_json(relative_version, 4 * 1024 * 1024)
             if not isinstance(metadata, dict):
                 raise ValueError(f"Minecraft version metadata is not an object: {relative_version}.")
+
+            # The client JAR is a required input to Horizon's native preparation.
+            # Validate it against Mojang's per-version size and SHA-1 metadata so
+            # a metadata-only or substituted client archive cannot pass preflight.
+            downloads = metadata.get("downloads")
+            client = downloads.get("client") if isinstance(downloads, dict) else None
+            client_sha1 = client.get("sha1") if isinstance(client, dict) else None
+            client_size = client.get("size") if isinstance(client, dict) else None
+            if (not isinstance(client_sha1, str) or len(client_sha1) != 40
+                    or any(c not in "0123456789abcdefABCDEF" for c in client_sha1)
+                    or not isinstance(client_size, int) or client_size <= 0):
+                raise ValueError(
+                    f"Minecraft version metadata has invalid client JAR metadata: {relative_version}."
+                )
+            version_id = version_parts[1]
+            client_path = f"versions/{version_id}/{version_id}.jar"
+            client_info = entries.get(prefix + client_path)
+            if client_info is None or client_info.file_size != client_size:
+                raise ValueError(
+                    f"Minecraft ZIP is missing the correctly sized client JAR: {client_path}."
+                )
+            client_hash = hashlib.sha1()
+            with archive.open(client_info) as client_file:
+                for chunk in iter(lambda: client_file.read(1024 * 1024), b""):
+                    client_hash.update(chunk)
+            if client_hash.hexdigest() != client_sha1.lower():
+                raise ValueError(
+                    f"Minecraft client JAR has a SHA-1 mismatch: {client_path} "
+                    f"(expected {client_sha1.lower()}, got {client_hash.hexdigest()})."
+                )
+
             asset_index = metadata.get("assetIndex")
             index_id = asset_index.get("id") if isinstance(asset_index, dict) else None
             if (not isinstance(index_id, str) or not index_id
