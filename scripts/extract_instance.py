@@ -54,6 +54,10 @@ def find_minecraft_root(root: pathlib.Path) -> pathlib.Path:
     return ranked[0]
 
 def extract_safe(archive: pathlib.Path, destination: pathlib.Path) -> pathlib.Path:
+    # Do not resolve through a destination symlink: doing so would silently redirect
+    # extraction outside the caller-selected output directory.
+    if destination.is_symlink():
+        raise SystemExit(f"Existing symlink extraction destination refused: {destination}")
     # Resolve without creating the destination. An invalid archive must not leave
     # even an empty output directory behind.
     root = destination.resolve()
