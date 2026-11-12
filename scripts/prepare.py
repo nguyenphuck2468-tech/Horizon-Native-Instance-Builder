@@ -100,7 +100,7 @@ def validate_minecraft_layout(names):
 
 def validate_minecraft_archive(path, names):
     """Validate real files and the asset-index references, not just directory names."""
-    root = validate_minecraft_layout(names)
+    root = discover_minecraft_root(names)
     prefix = "" if root == "." else root.rstrip("/") + "/"
     with zipfile.ZipFile(path) as archive:
         entries = {
