@@ -410,5 +410,26 @@ class InstanceArchiveTests(unittest.TestCase):
             self.assertEqual(archive.read_bytes(), before)
 
 
+    def test_rejects_unicode_canonical_equivalent_path_collisions(self):
+        with tempfile.TemporaryDirectory() as temp:
+            archive = pathlib.Path(temp) / "unicode-collision.zip"
+            with zipfile.ZipFile(archive, "w") as zf:
+                zf.writestr("game/caf\u00e9.txt", b"composed")
+                zf.writestr("game/cafe\u0301.txt", b"decomposed")
+            with self.assertRaisesRegex(ValueError, "Case-insensitive ZIP path collision"):
+                validate_zip(archive)
+
+    def test_extractor_rejects_unicode_canonical_equivalent_path_collisions(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = pathlib.Path(temp)
+            archive = root / "unicode-collision.zip"
+            with zipfile.ZipFile(archive, "w") as zf:
+                zf.writestr("game/versions/26.3/26.3.json", "{}")
+                zf.writestr("game/caf\u00e9.txt", b"composed")
+                zf.writestr("game/cafe\u0301.txt", b"decomposed")
+            with self.assertRaisesRegex(SystemExit, "Case-insensitive ZIP path collision"):
+                extract_safe(archive, root / "out")
+
+
 if __name__ == "__main__":
     unittest.main()
