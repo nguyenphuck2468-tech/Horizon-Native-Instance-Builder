@@ -3,6 +3,7 @@ import argparse
 import hashlib
 import json
 import pathlib
+import unicodedata
 import zipfile
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
@@ -33,6 +34,12 @@ def _portable_windows_component(part):
     )
 
 
+
+
+def _collision_key(value):
+    """Normalize canonical Unicode equivalents before case-insensitive comparison."""
+    normalized = unicodedata.normalize("NFC", value)
+    return unicodedata.normalize("NFC", normalized.casefold())
 
 
 def digest(path):
@@ -292,7 +299,7 @@ def validate_zip(path):
             name = "/".join(parts)
             if name in seen:
                 raise ValueError(f"Duplicate ZIP path after normalization: {item.filename}")
-            folded = name.casefold()
+            folded = _collision_key(name)
             if folded in seen_casefold:
                 raise ValueError(
                     f"Case-insensitive ZIP path collision: {item.filename}"
@@ -301,7 +308,7 @@ def validate_zip(path):
             # also be a parent directory (for example, "game/mods" and
             # "game/mods/example.jar"). Reject this before creating any files.
             parents = ["/".join(parts[:index]) for index in range(1, len(parts))]
-            folded_parents = [parent.casefold() for parent in parents]
+            folded_parents = [_collision_key(parent) for parent in parents]
             conflicting_parent = next(
                 (parent for parent in folded_parents if parent in files_casefold), None
             )
