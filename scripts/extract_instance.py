@@ -106,7 +106,7 @@ def extract_safe(archive: pathlib.Path, destination: pathlib.Path) -> pathlib.Pa
                 raise SystemExit(f"Case-insensitive ZIP path collision: {info.filename}")
             parents = ["/".join(path.parts[:index]) for index in range(1, len(path.parts))]
             conflicting_parent = next(
-                (_collision_key(parent) for parent in parents if parent.casefold() in files_casefold),
+                (_collision_key(parent) for parent in parents if _collision_key(parent) in files_casefold),
                 None,
             )
             if conflicting_parent is not None:
