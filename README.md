@@ -51,3 +51,8 @@ Linux x86_64 and Windows x86_64. macOS is deferred until its hosted build path i
 ## Experimental status
 
 A successful run requires a prepared base and an actual native client binary; compiling the launcher CLI alone is not considered success. Check docs/STATUS.md for the remaining verification boundary.
+
+
+## Guided build wizard
+
+For a local, dependency-free preflight UI, open `tools/builder-wizard.html` in a modern browser. Select the separate Horizon instance ZIP and full Minecraft game ZIP, optionally add trusted `.hnmod` bundles, and enter a Horizon revision plus a Release tag. The wizard checks only basic file presence and ZIP signatures, then prepares a GitHub CLI dispatch command. It does not upload files or replace the authoritative archive checks in GitHub Actions.
