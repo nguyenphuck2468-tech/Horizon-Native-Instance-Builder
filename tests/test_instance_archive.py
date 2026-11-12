@@ -204,6 +204,25 @@ class InstanceArchiveTests(unittest.TestCase):
             with self.assertRaisesRegex(SystemExit, "file/directory path collision"):
                 extract_safe(archive, root / "out")
 
+    def test_rejects_case_insensitive_file_parent_collisions(self):
+        with tempfile.TemporaryDirectory() as temp:
+            archive = pathlib.Path(temp) / "casefold-parent.zip"
+            with zipfile.ZipFile(archive, "w") as zf:
+                zf.writestr("Game/Mods", b"file")
+                zf.writestr("game/mods/example.jar", b"child")
+            with self.assertRaisesRegex(ValueError, "file/directory path collision"):
+                validate_zip(archive)
+
+    def test_extractor_rejects_case_insensitive_file_parent_collisions(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = pathlib.Path(temp)
+            archive = root / "casefold-parent.zip"
+            with zipfile.ZipFile(archive, "w") as zf:
+                zf.writestr("Game/Mods", b"file")
+                zf.writestr("game/mods/example.jar", b"child")
+            with self.assertRaisesRegex(SystemExit, "file/directory path collision"):
+                extract_safe(archive, root / "out")
+
     def test_rejects_case_insensitive_path_collisions(self):
         with tempfile.TemporaryDirectory() as temp:
             archive = pathlib.Path(temp) / "case-collision.zip"
