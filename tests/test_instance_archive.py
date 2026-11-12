@@ -3,6 +3,7 @@ import json
 import pathlib
 import tempfile
 import unittest
+from unittest.mock import patch
 import zipfile
 
 from scripts.prepare import discover_minecraft_root, validate_minecraft_archive, validate_minecraft_layout, validate_zip
@@ -260,6 +261,55 @@ class InstanceArchiveTests(unittest.TestCase):
                 zf.writestr(info, "target")
             with self.assertRaisesRegex(ValueError, "Symlink"):
                 validate_zip(archive)
+
+    def test_preflight_rejects_too_many_zip_entries(self):
+        with tempfile.TemporaryDirectory() as temp:
+            archive = pathlib.Path(temp) / "many.zip"
+            with zipfile.ZipFile(archive, "w") as zf:
+                zf.writestr("one.txt", b"1")
+                zf.writestr("two.txt", b"2")
+            with patch("scripts.prepare.MAX_ARCHIVE_ENTRIES", 1):
+                with self.assertRaisesRegex(ValueError, "too many entries"):
+                    validate_zip(archive)
+
+    def test_preflight_rejects_excessive_uncompressed_size(self):
+        with tempfile.TemporaryDirectory() as temp:
+            archive = pathlib.Path(temp) / "large.zip"
+            with zipfile.ZipFile(archive, "w") as zf:
+                zf.writestr("payload.bin", b"12345")
+            with patch("scripts.prepare.MAX_TOTAL_UNCOMPRESSED_BYTES", 4):
+                with self.assertRaisesRegex(ValueError, "total uncompressed size limit"):
+                    validate_zip(archive)
+
+    def test_preflight_rejects_oversized_single_member(self):
+        with tempfile.TemporaryDirectory() as temp:
+            archive = pathlib.Path(temp) / "member.zip"
+            with zipfile.ZipFile(archive, "w") as zf:
+                zf.writestr("payload.bin", b"12345")
+            with patch("scripts.prepare.MAX_MEMBER_UNCOMPRESSED_BYTES", 4):
+                with self.assertRaisesRegex(ValueError, "member exceeds"):
+                    validate_zip(archive)
+
+    def test_extractor_rejects_excessive_uncompressed_size(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = pathlib.Path(temp)
+            archive = root / "large.zip"
+            with zipfile.ZipFile(archive, "w") as zf:
+                zf.writestr("game/versions/26.3/26.3.json", b"12345")
+            with patch("scripts.extract_instance.MAX_TOTAL_UNCOMPRESSED_BYTES", 4):
+                with self.assertRaisesRegex(SystemExit, "total uncompressed size limit"):
+                    extract_safe(archive, root / "out")
+
+    def test_extractor_rejects_too_many_entries(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = pathlib.Path(temp)
+            archive = root / "many.zip"
+            with zipfile.ZipFile(archive, "w") as zf:
+                zf.writestr("one.txt", b"1")
+                zf.writestr("two.txt", b"2")
+            with patch("scripts.extract_instance.MAX_ARCHIVE_ENTRIES", 1):
+                with self.assertRaisesRegex(SystemExit, "too many entries"):
+                    extract_safe(archive, root / "out")
 
     def test_extracts_game_folder_without_changing_archive(self):
         with tempfile.TemporaryDirectory() as temp:
