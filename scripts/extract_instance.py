@@ -27,6 +27,7 @@ def extract_safe(archive: pathlib.Path, destination: pathlib.Path) -> pathlib.Pa
     root = destination.resolve()
     seen = set()
     seen_casefold = set()
+    files = set()
     with zipfile.ZipFile(archive) as zf:
         for info in zf.infolist():
             raw_name = info.filename.replace(chr(92), "/")
@@ -40,8 +41,21 @@ def extract_safe(archive: pathlib.Path, destination: pathlib.Path) -> pathlib.Pa
             folded = normalized.casefold()
             if folded in seen_casefold:
                 raise SystemExit(f"Case-insensitive ZIP path collision: {info.filename}")
+            parents = ["/".join(path.parts[:index]) for index in range(1, len(path.parts))]
+            conflicting_parent = next((parent for parent in parents if parent in files), None)
+            if conflicting_parent is not None:
+                raise SystemExit(
+                    f"ZIP file/directory path collision: {info.filename} is below file {conflicting_parent}"
+                )
+            is_directory = info.is_dir() or raw_name.endswith("/")
+            if not is_directory and any(existing.startswith(normalized + "/") for existing in seen):
+                raise SystemExit(
+                    f"ZIP file/directory path collision: {info.filename} replaces a directory"
+                )
             seen.add(normalized)
             seen_casefold.add(folded)
+            if not is_directory:
+                files.add(normalized)
             mode = (info.external_attr >> 16) & 0o170000
             if mode == 0o120000:
                 raise SystemExit(f"Symlink entry refused: {info.filename}")
