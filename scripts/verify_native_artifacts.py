@@ -39,7 +39,7 @@ def _verify_binary_format(path: Path, target: str) -> None:
     with path.open("rb") as stream:
         if target == "linux-x86_64":
             header = stream.read(20)
-            if len(header) < 20 or header[:4] != b"\\x7fELF":
+            if len(header) < 20 or header[:4] != b"\x7fELF":
                 raise ValueError(f"{target}: native client is not an ELF executable")
             if header[4] != 2 or header[5] != 1:
                 raise ValueError(f"{target}: expected a 64-bit little-endian ELF executable")
@@ -57,7 +57,7 @@ def _verify_binary_format(path: Path, target: str) -> None:
                 raise ValueError(f"{target}: invalid or truncated PE header offset")
             stream.seek(pe_offset)
             pe_header = stream.read(6)
-            if len(pe_header) != 6 or pe_header[:4] != b"PE\\x00\\x00":
+            if len(pe_header) != 6 or pe_header[:4] != b"PE\x00\x00":
                 raise ValueError(f"{target}: invalid PE signature")
             machine = struct.unpack_from("<H", pe_header, 4)[0]
             if machine != 0x8664:
