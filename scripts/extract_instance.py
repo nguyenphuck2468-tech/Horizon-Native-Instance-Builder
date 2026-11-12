@@ -26,6 +26,7 @@ def extract_safe(archive: pathlib.Path, destination: pathlib.Path) -> pathlib.Pa
     destination.mkdir(parents=True, exist_ok=True)
     root = destination.resolve()
     seen = set()
+    seen_casefold = set()
     with zipfile.ZipFile(archive) as zf:
         for info in zf.infolist():
             raw_name = info.filename.replace(chr(92), "/")
@@ -36,7 +37,11 @@ def extract_safe(archive: pathlib.Path, destination: pathlib.Path) -> pathlib.Pa
             normalized = "/".join(path.parts)
             if normalized in seen:
                 raise SystemExit(f"Duplicate ZIP path after normalization: {info.filename}")
+            folded = normalized.casefold()
+            if folded in seen_casefold:
+                raise SystemExit(f"Case-insensitive ZIP path collision: {info.filename}")
             seen.add(normalized)
+            seen_casefold.add(folded)
             mode = (info.external_attr >> 16) & 0o170000
             if mode == 0o120000:
                 raise SystemExit(f"Symlink entry refused: {info.filename}")
