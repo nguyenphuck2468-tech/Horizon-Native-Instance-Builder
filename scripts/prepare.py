@@ -240,6 +240,7 @@ def validate_zip(path):
         seen = set()
         seen_casefold = set()
         files = set()
+        files_casefold = set()
         for item in entries:
             raw_name = item.filename.replace(chr(92), "/")
             parts = pathlib.PurePosixPath(raw_name).parts
@@ -258,13 +259,18 @@ def validate_zip(path):
             # also be a parent directory (for example, "game/mods" and
             # "game/mods/example.jar"). Reject this before creating any files.
             parents = ["/".join(parts[:index]) for index in range(1, len(parts))]
-            conflicting_parent = next((parent for parent in parents if parent in files), None)
+            folded_parents = [parent.casefold() for parent in parents]
+            conflicting_parent = next(
+                (parent for parent in folded_parents if parent in files_casefold), None
+            )
             if conflicting_parent is not None:
                 raise ValueError(
                     f"ZIP file/directory path collision: {item.filename} is below file {conflicting_parent}"
                 )
             is_directory = item.is_dir() or raw_name.endswith("/")
-            if not is_directory and any(existing.startswith(name + "/") for existing in seen):
+            if not is_directory and any(
+                existing.startswith(folded + "/") for existing in seen_casefold
+            ):
                 raise ValueError(
                     f"ZIP file/directory path collision: {item.filename} replaces a directory"
                 )
@@ -272,6 +278,7 @@ def validate_zip(path):
             seen_casefold.add(folded)
             if not is_directory:
                 files.add(name)
+                files_casefold.add(folded)
             mode = (item.external_attr >> 16) & 0o170000
             if mode == 0o120000:
                 raise ValueError(f"Symlink entry refused: {item.filename}")
