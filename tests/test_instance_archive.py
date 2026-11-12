@@ -362,6 +362,20 @@ class InstanceArchiveTests(unittest.TestCase):
             self.assertFalse(destination.exists())
             self.assertFalse((destination / "game" / "safe.txt").exists())
 
+    def test_extractor_rejects_symlink_destination_root(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = pathlib.Path(temp)
+            archive = root / "instance.zip"
+            target = root / "redirected"
+            target.mkdir()
+            destination = root / "out"
+            destination.symlink_to(target, target_is_directory=True)
+            with zipfile.ZipFile(archive, "w") as zf:
+                zf.writestr("game/versions/26.3/26.3.json", "{}")
+            with self.assertRaisesRegex(SystemExit, "symlink extraction destination"):
+                extract_safe(archive, destination)
+            self.assertEqual(list(target.iterdir()), [])
+
     def test_extractor_rejects_existing_symlink_inside_destination(self):
         with tempfile.TemporaryDirectory() as temp:
             root = pathlib.Path(temp)
