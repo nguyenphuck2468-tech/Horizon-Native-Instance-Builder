@@ -27,14 +27,25 @@ class InstanceArchiveTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "assets/objects"):
             validate_minecraft_layout(names)
 
-    def _write_complete_minecraft_zip(self, archive, include_asset=True, corrupt_asset=False):
+    def _write_complete_minecraft_zip(
+        self, archive, include_asset=True, corrupt_asset=False,
+        include_client=True, corrupt_client=False,
+    ):
         asset_bytes = b"asset"
         asset_hash = hashlib.sha1(asset_bytes).hexdigest()
+        client_bytes = b"client-jar"
+        client_hash = hashlib.sha1(client_bytes).hexdigest()
+        metadata = {
+            "assetIndex": {"id": "26.3"},
+            "downloads": {
+                "client": {"sha1": client_hash, "size": len(client_bytes)}
+            },
+        }
         with zipfile.ZipFile(archive, "w") as zf:
-            zf.writestr(
-                "game/versions/26.3/26.3.json",
-                '{"assetIndex":{"id":"26.3"}}',
-            )
+            zf.writestr("game/versions/26.3/26.3.json", json.dumps(metadata))
+            if include_client:
+                payload = b"corrupt-client" if corrupt_client else client_bytes
+                zf.writestr("game/versions/26.3/26.3.jar", payload)
             zf.writestr(
                 "game/assets/indexes/26.3.json",
                 '{"objects":{"icons/icon.png":{"hash":"' + asset_hash + '"}}}',
@@ -50,6 +61,22 @@ class InstanceArchiveTests(unittest.TestCase):
             self._write_complete_minecraft_zip(archive)
             _, names = validate_zip(archive)
             self.assertEqual(validate_minecraft_archive(archive, names), "game")
+
+    def test_rejects_missing_pinned_client_jar(self):
+        with tempfile.TemporaryDirectory() as temp:
+            archive = pathlib.Path(temp) / "minecraft.zip"
+            self._write_complete_minecraft_zip(archive, include_client=False)
+            _, names = validate_zip(archive)
+            with self.assertRaisesRegex(ValueError, "missing the correctly sized client JAR"):
+                validate_minecraft_archive(archive, names)
+
+    def test_rejects_client_jar_with_wrong_sha1(self):
+        with tempfile.TemporaryDirectory() as temp:
+            archive = pathlib.Path(temp) / "minecraft.zip"
+            self._write_complete_minecraft_zip(archive, corrupt_client=True)
+            _, names = validate_zip(archive)
+            with self.assertRaisesRegex(ValueError, "client JAR has a SHA-1 mismatch"):
+                validate_minecraft_archive(archive, names)
 
     def test_rejects_missing_asset_referenced_by_index(self):
         with tempfile.TemporaryDirectory() as temp:
@@ -74,14 +101,30 @@ class InstanceArchiveTests(unittest.TestCase):
             first_hash = hashlib.sha1(first_bytes).hexdigest()
             second_hash = hashlib.sha1(b"second").hexdigest()
             with zipfile.ZipFile(archive, "w") as zf:
+                first_client = b"first-client"
+                second_client = b"second-client"
                 zf.writestr(
                     "game/versions/26.3/26.3.json",
-                    '{"assetIndex":{"id":"26.3"}}',
+                    json.dumps({
+                        "assetIndex": {"id": "26.3"},
+                        "downloads": {"client": {
+                            "sha1": hashlib.sha1(first_client).hexdigest(),
+                            "size": len(first_client),
+                        }},
+                    }),
                 )
                 zf.writestr(
                     "game/versions/26.2/26.2.json",
-                    '{"assetIndex":{"id":"26.2"}}',
+                    json.dumps({
+                        "assetIndex": {"id": "26.2"},
+                        "downloads": {"client": {
+                            "sha1": hashlib.sha1(second_client).hexdigest(),
+                            "size": len(second_client),
+                        }},
+                    }),
                 )
+                zf.writestr("game/versions/26.3/26.3.jar", first_client)
+                zf.writestr("game/versions/26.2/26.2.jar", second_client)
                 zf.writestr(
                     "game/assets/indexes/26.3.json",
                     '{"objects":{"first":{"hash":"' + first_hash + '"}}}',
@@ -103,7 +146,18 @@ class InstanceArchiveTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp:
             archive = pathlib.Path(temp) / "minecraft.zip"
             with zipfile.ZipFile(archive, "w") as zf:
-                zf.writestr("game/versions/26.3/26.3.json", '{"assetIndex":{"id":"26.3"}}')
+                client_bytes = b"client-jar"
+                zf.writestr(
+                    "game/versions/26.3/26.3.json",
+                    json.dumps({
+                        "assetIndex": {"id": "26.3"},
+                        "downloads": {"client": {
+                            "sha1": hashlib.sha1(client_bytes).hexdigest(),
+                            "size": len(client_bytes),
+                        }},
+                    }),
+                )
+                zf.writestr("game/versions/26.3/26.3.jar", client_bytes)
                 zf.writestr("game/assets/indexes/26.3.json", '{"objects":{"x":{"hash":"' + "a" * 40 + '"}}}')
                 zf.writestr("game/assets/objects/", "")
                 zf.writestr("game/libraries/", "")
