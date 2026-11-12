@@ -1,3 +1,4 @@
+import hashlib
 import pathlib
 import tempfile
 import unittest
@@ -26,8 +27,9 @@ class InstanceArchiveTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "assets/objects"):
             validate_minecraft_layout(names)
 
-    def _write_complete_minecraft_zip(self, archive, include_asset=True):
-        asset_hash = "a" * 40
+    def _write_complete_minecraft_zip(self, archive, include_asset=True, corrupt_asset=False):
+        asset_bytes = b"asset"
+        asset_hash = hashlib.sha1(asset_bytes).hexdigest()
         with zipfile.ZipFile(archive, "w") as zf:
             zf.writestr(
                 "game/versions/26.3/26.3.json",
@@ -38,7 +40,8 @@ class InstanceArchiveTests(unittest.TestCase):
                 '{"objects":{"icons/icon.png":{"hash":"' + asset_hash + '"}}}',
             )
             if include_asset:
-                zf.writestr("game/assets/objects/aa/" + asset_hash, b"asset")
+                payload = b"corrupt" if corrupt_asset else asset_bytes
+                zf.writestr("game/assets/objects/" + asset_hash[:2] + "/" + asset_hash, payload)
             zf.writestr("game/libraries/org/example/library/1.0/library-1.0.jar", b"jar")
 
     def test_validates_asset_index_references_and_real_library_files(self):
@@ -56,11 +59,20 @@ class InstanceArchiveTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "missing asset objects"):
                 validate_minecraft_archive(archive, names)
 
+    def test_rejects_asset_object_with_wrong_sha1(self):
+        with tempfile.TemporaryDirectory() as temp:
+            archive = pathlib.Path(temp) / "minecraft.zip"
+            self._write_complete_minecraft_zip(archive, corrupt_asset=True)
+            _, names = validate_zip(archive)
+            with self.assertRaisesRegex(ValueError, "SHA-1 mismatch"):
+                validate_minecraft_archive(archive, names)
+
     def test_validates_asset_objects_for_every_included_version(self):
         with tempfile.TemporaryDirectory() as temp:
             archive = pathlib.Path(temp) / "minecraft.zip"
-            first_hash = "a" * 40
-            second_hash = "b" * 40
+            first_bytes = b"first"
+            first_hash = hashlib.sha1(first_bytes).hexdigest()
+            second_hash = hashlib.sha1(b"second").hexdigest()
             with zipfile.ZipFile(archive, "w") as zf:
                 zf.writestr(
                     "game/versions/26.3/26.3.json",
@@ -78,7 +90,7 @@ class InstanceArchiveTests(unittest.TestCase):
                     "game/assets/indexes/26.2.json",
                     '{"objects":{"second":{"hash":"' + second_hash + '"}}}',
                 )
-                zf.writestr("game/assets/objects/aa/" + first_hash, b"first")
+                zf.writestr("game/assets/objects/" + first_hash[:2] + "/" + first_hash, first_bytes)
                 zf.writestr(
                     "game/libraries/org/example/library/1.0/library-1.0.jar",
                     b"jar",
