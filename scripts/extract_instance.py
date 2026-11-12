@@ -31,10 +31,15 @@ def extract_safe(archive: pathlib.Path, destination: pathlib.Path) -> pathlib.Pa
     root = destination.resolve()
     seen = set()
     seen_casefold = set()
-    files = set()
     files_casefold = set()
+    validated_entries = []
+
+    # Validate the complete archive before writing anything. This prevents a late malicious
+    # entry from leaving a partially extracted tree behind.
     with zipfile.ZipFile(archive) as zf:
         entries = zf.infolist()
+        if not entries:
+            raise SystemExit("Empty ZIP archive")
         if len(entries) > MAX_ARCHIVE_ENTRIES:
             raise SystemExit(
                 f"ZIP archive has too many entries: {len(entries)} "
@@ -44,6 +49,8 @@ def extract_safe(archive: pathlib.Path, destination: pathlib.Path) -> pathlib.Pa
         for info in entries:
             raw_name = info.filename.replace(chr(92), "/")
             is_directory = info.is_dir() or raw_name.endswith("/")
+            if info.flag_bits & 0x1:
+                raise SystemExit(f"Encrypted ZIP entry refused: {info.filename}")
             if not is_directory:
                 if info.file_size < 0 or info.file_size > MAX_MEMBER_UNCOMPRESSED_BYTES:
                     raise SystemExit(
@@ -56,8 +63,13 @@ def extract_safe(archive: pathlib.Path, destination: pathlib.Path) -> pathlib.Pa
                         f"({MAX_TOTAL_UNCOMPRESSED_BYTES} bytes)"
                     )
             path = pathlib.PurePosixPath(raw_name)
-            if (not path.parts or raw_name.startswith("/") or chr(0) in raw_name or
-                ".." in path.parts or (path.parts and ":" in path.parts[0])):
+            if (
+                not path.parts
+                or raw_name.startswith("/")
+                or chr(0) in raw_name
+                or ".." in path.parts
+                or (path.parts and ":" in path.parts[0])
+            ):
                 raise SystemExit(f"Unsafe ZIP path: {info.filename}")
             normalized = "/".join(path.parts)
             if normalized in seen:
@@ -66,9 +78,9 @@ def extract_safe(archive: pathlib.Path, destination: pathlib.Path) -> pathlib.Pa
             if folded in seen_casefold:
                 raise SystemExit(f"Case-insensitive ZIP path collision: {info.filename}")
             parents = ["/".join(path.parts[:index]) for index in range(1, len(path.parts))]
-            folded_parents = [parent.casefold() for parent in parents]
             conflicting_parent = next(
-                (parent for parent in folded_parents if parent in files_casefold), None
+                (parent.casefold() for parent in parents if parent.casefold() in files_casefold),
+                None,
             )
             if conflicting_parent is not None:
                 raise SystemExit(
@@ -80,24 +92,37 @@ def extract_safe(archive: pathlib.Path, destination: pathlib.Path) -> pathlib.Pa
                 raise SystemExit(
                     f"ZIP file/directory path collision: {info.filename} replaces a directory"
                 )
-            seen.add(normalized)
-            seen_casefold.add(folded)
-            if not is_directory:
-                files.add(normalized)
-                files_casefold.add(folded)
             mode = (info.external_attr >> 16) & 0o170000
             if mode == 0o120000:
                 raise SystemExit(f"Symlink entry refused: {info.filename}")
+            if mode not in (0, 0o100000, 0o040000):
+                raise SystemExit(f"Unsupported special ZIP entry refused: {info.filename}")
             target = root.joinpath(*path.parts)
             if not target.resolve().is_relative_to(root):
                 raise SystemExit(f"ZIP entry escapes extraction directory: {info.filename}")
-            if info.is_dir():
+            seen.add(normalized)
+            seen_casefold.add(folded)
+            if not is_directory:
+                files_casefold.add(folded)
+            validated_entries.append((info, path, is_directory))
+
+        for info, path, is_directory in validated_entries:
+            target = root.joinpath(*path.parts)
+            current = root
+            for part in path.parts:
+                current = current / part
+                if current.is_symlink():
+                    raise SystemExit(
+                        f"Existing symlink in extraction path refused: {current}"
+                    )
+            if is_directory:
                 target.mkdir(parents=True, exist_ok=True)
                 continue
             target.parent.mkdir(parents=True, exist_ok=True)
-            with zf.open(info) as source, target.open("wb") as output:
+            with zf.open(info) as source, target.open("xb") as output:
                 while chunk := source.read(1024 * 1024):
                     output.write(chunk)
+
     return find_minecraft_root(root)
 
 def main():
