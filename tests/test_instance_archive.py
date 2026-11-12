@@ -176,6 +176,25 @@ class InstanceArchiveTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "versions"):
                 discover_minecraft_root(names)
 
+    def test_rejects_case_insensitive_path_collisions(self):
+        with tempfile.TemporaryDirectory() as temp:
+            archive = pathlib.Path(temp) / "case-collision.zip"
+            with zipfile.ZipFile(archive, "w") as zf:
+                zf.writestr("game/Mods/example.jar", b"first")
+                zf.writestr("game/mods/EXAMPLE.jar", b"second")
+            with self.assertRaisesRegex(ValueError, "Case-insensitive ZIP path collision"):
+                validate_zip(archive)
+
+    def test_extractor_rejects_case_insensitive_path_collisions(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = pathlib.Path(temp)
+            archive = root / "case-collision.zip"
+            with zipfile.ZipFile(archive, "w") as zf:
+                zf.writestr("game/versions/26.3/26.3.json", "{}")
+                zf.writestr("game/Versions/26.3/26.3.json", "{}")
+            with self.assertRaisesRegex(SystemExit, "Case-insensitive ZIP path collision"):
+                extract_safe(archive, root / "out")
+
     def test_rejects_path_traversal(self):
         with tempfile.TemporaryDirectory() as temp:
             archive = pathlib.Path(temp) / "unsafe.zip"
