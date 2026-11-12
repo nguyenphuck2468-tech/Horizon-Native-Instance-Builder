@@ -280,6 +280,26 @@ class InstanceArchiveTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "Symlink"):
                 validate_zip(archive)
 
+    def test_preflight_and_extractor_reject_special_and_mismatched_entry_types(self):
+        cases = (
+            ("game/fifo", 0o010644, b"special", "Unsupported special ZIP entry"),
+            ("game/directory-mode", 0o040755, b"", "directory mode/name mismatch"),
+            ("game/file-mode/", 0o100644, b"", "file mode/name mismatch"),
+        )
+        for name, unix_mode, payload, message in cases:
+            with self.subTest(path=name), tempfile.TemporaryDirectory() as temp:
+                root = pathlib.Path(temp)
+                archive = root / "entry-type.zip"
+                info = zipfile.ZipInfo(name)
+                info.create_system = 3
+                info.external_attr = unix_mode << 16
+                with zipfile.ZipFile(archive, "w") as zf:
+                    zf.writestr(info, payload)
+                with self.assertRaisesRegex(ValueError, message):
+                    validate_zip(archive)
+                with self.assertRaisesRegex(SystemExit, message):
+                    extract_safe(archive, root / "out")
+
     def test_preflight_rejects_too_many_zip_entries(self):
         with tempfile.TemporaryDirectory() as temp:
             archive = pathlib.Path(temp) / "many.zip"
