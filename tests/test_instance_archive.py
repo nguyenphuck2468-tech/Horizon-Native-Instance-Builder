@@ -390,6 +390,30 @@ class InstanceArchiveTests(unittest.TestCase):
             self.assertFalse((destination / "game").exists())
             self.assertEqual(list(destination.iterdir()), [sentinel])
 
+    def test_extractor_removes_new_destination_after_midstream_failure(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = pathlib.Path(temp)
+            archive = root / "partial.zip"
+            destination = root / "new" / "out"
+            with zipfile.ZipFile(archive, "w") as zf:
+                zf.writestr("game/versions/26.3/26.3.json", "{}")
+                zf.writestr("game/a.bin", b"first payload")
+                zf.writestr("game/b.bin", b"second payload")
+
+            original_read = zipfile.ZipExtFile.read
+
+            def fail_second_member(member, size=-1):
+                if member.name == "game/b.bin":
+                    raise zipfile.BadZipFile("simulated CRC/read failure")
+                return original_read(member, size)
+
+            with patch.object(zipfile.ZipExtFile, "read", fail_second_member):
+                with self.assertRaisesRegex(zipfile.BadZipFile, "simulated CRC"):
+                    extract_safe(archive, destination)
+
+            self.assertFalse(destination.exists())
+            self.assertFalse((root / "new").exists())
+
     def test_extractor_rejects_symlink_destination_root(self):
         with tempfile.TemporaryDirectory() as temp:
             root = pathlib.Path(temp)
