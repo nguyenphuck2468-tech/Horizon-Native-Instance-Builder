@@ -28,6 +28,7 @@ def extract_safe(archive: pathlib.Path, destination: pathlib.Path) -> pathlib.Pa
     seen = set()
     seen_casefold = set()
     files = set()
+    files_casefold = set()
     with zipfile.ZipFile(archive) as zf:
         for info in zf.infolist():
             raw_name = info.filename.replace(chr(92), "/")
@@ -42,13 +43,18 @@ def extract_safe(archive: pathlib.Path, destination: pathlib.Path) -> pathlib.Pa
             if folded in seen_casefold:
                 raise SystemExit(f"Case-insensitive ZIP path collision: {info.filename}")
             parents = ["/".join(path.parts[:index]) for index in range(1, len(path.parts))]
-            conflicting_parent = next((parent for parent in parents if parent in files), None)
+            folded_parents = [parent.casefold() for parent in parents]
+            conflicting_parent = next(
+                (parent for parent in folded_parents if parent in files_casefold), None
+            )
             if conflicting_parent is not None:
                 raise SystemExit(
                     f"ZIP file/directory path collision: {info.filename} is below file {conflicting_parent}"
                 )
             is_directory = info.is_dir() or raw_name.endswith("/")
-            if not is_directory and any(existing.startswith(normalized + "/") for existing in seen):
+            if not is_directory and any(
+                existing.startswith(folded + "/") for existing in seen_casefold
+            ):
                 raise SystemExit(
                     f"ZIP file/directory path collision: {info.filename} replaces a directory"
                 )
@@ -56,6 +62,7 @@ def extract_safe(archive: pathlib.Path, destination: pathlib.Path) -> pathlib.Pa
             seen_casefold.add(folded)
             if not is_directory:
                 files.add(normalized)
+                files_casefold.add(folded)
             mode = (info.external_attr >> 16) & 0o170000
             if mode == 0o120000:
                 raise SystemExit(f"Symlink entry refused: {info.filename}")
