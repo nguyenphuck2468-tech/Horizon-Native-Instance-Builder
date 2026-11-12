@@ -117,6 +117,10 @@ def extract_safe(archive: pathlib.Path, destination: pathlib.Path) -> pathlib.Pa
                 raise SystemExit(f"Symlink entry refused: {info.filename}")
             if mode not in (0, 0o100000, 0o040000):
                 raise SystemExit(f"Unsupported special ZIP entry refused: {info.filename}")
+            if mode == 0o040000 and not is_directory:
+                raise SystemExit(f"ZIP directory mode/name mismatch: {info.filename}")
+            if mode == 0o100000 and is_directory:
+                raise SystemExit(f"ZIP file mode/name mismatch: {info.filename}")
             target = root.joinpath(*path.parts)
             if not target.resolve().is_relative_to(root):
                 raise SystemExit(f"ZIP entry escapes extraction directory: {info.filename}")
