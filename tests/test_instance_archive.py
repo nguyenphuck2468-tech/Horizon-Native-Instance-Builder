@@ -247,6 +247,7 @@ class InstanceArchiveTests(unittest.TestCase):
         for unsafe_name in (
             "game/mods/payload:stream",
             "game/CON.txt",
+            "game/CON .txt",
             "game/mods/trailing.",
             "game/mods/trailing ",
         ):
