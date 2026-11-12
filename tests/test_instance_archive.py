@@ -1,4 +1,5 @@
 import hashlib
+import json
 import pathlib
 import tempfile
 import unittest
@@ -44,7 +45,7 @@ class InstanceArchiveTests(unittest.TestCase):
         with zipfile.ZipFile(archive, "w") as zf:
             zf.writestr("game/versions/26.3/26.3.json", json.dumps(metadata))
             if include_client:
-                payload = b"corrupt-client" if corrupt_client else client_bytes
+                payload = b"bad-client" if corrupt_client else client_bytes
                 zf.writestr("game/versions/26.3/26.3.jar", payload)
             zf.writestr(
                 "game/assets/indexes/26.3.json",
