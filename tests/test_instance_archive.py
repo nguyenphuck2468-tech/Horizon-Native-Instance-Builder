@@ -56,6 +56,37 @@ class InstanceArchiveTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "missing asset objects"):
                 validate_minecraft_archive(archive, names)
 
+    def test_validates_asset_objects_for_every_included_version(self):
+        with tempfile.TemporaryDirectory() as temp:
+            archive = pathlib.Path(temp) / "minecraft.zip"
+            first_hash = "a" * 40
+            second_hash = "b" * 40
+            with zipfile.ZipFile(archive, "w") as zf:
+                zf.writestr(
+                    "game/versions/26.3/26.3.json",
+                    '{"assetIndex":{"id":"26.3"}}',
+                )
+                zf.writestr(
+                    "game/versions/26.2/26.2.json",
+                    '{"assetIndex":{"id":"26.2"}}',
+                )
+                zf.writestr(
+                    "game/assets/indexes/26.3.json",
+                    '{"objects":{"first":{"hash":"' + first_hash + '"}}}',
+                )
+                zf.writestr(
+                    "game/assets/indexes/26.2.json",
+                    '{"objects":{"second":{"hash":"' + second_hash + '"}}}',
+                )
+                zf.writestr("game/assets/objects/aa/" + first_hash, b"first")
+                zf.writestr(
+                    "game/libraries/org/example/library/1.0/library-1.0.jar",
+                    b"jar",
+                )
+            _, names = validate_zip(archive)
+            with self.assertRaisesRegex(ValueError, "assets/indexes/26.2.json"):
+                validate_minecraft_archive(archive, names)
+
     def test_rejects_directory_only_assets_and_libraries(self):
         with tempfile.TemporaryDirectory() as temp:
             archive = pathlib.Path(temp) / "minecraft.zip"
