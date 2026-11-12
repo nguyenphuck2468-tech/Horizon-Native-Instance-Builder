@@ -261,6 +261,27 @@ class InstanceArchiveTests(unittest.TestCase):
                 with self.assertRaisesRegex(SystemExit, "Unsafe ZIP path"):
                     extract_safe(archive, root / "out")
 
+    def test_preflight_and_extractor_reject_encrypted_entries(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = pathlib.Path(temp)
+            archive = root / "encrypted.zip"
+            with zipfile.ZipFile(archive, "w") as zf:
+                zf.writestr("game/payload.bin", b"payload")
+
+            original_infolist = zipfile.ZipFile.infolist
+
+            def encrypted_infolist(instance):
+                entries = original_infolist(instance)
+                entries[0].flag_bits |= 0x1
+                return entries
+
+            with patch.object(zipfile.ZipFile, "infolist", encrypted_infolist):
+                with self.assertRaisesRegex(ValueError, "Encrypted ZIP entry refused"):
+                    validate_zip(archive)
+                with self.assertRaisesRegex(SystemExit, "Encrypted ZIP entry refused"):
+                    extract_safe(archive, root / "out")
+            self.assertFalse((root / "out").exists())
+
     def test_rejects_path_traversal(self):
         with tempfile.TemporaryDirectory() as temp:
             archive = pathlib.Path(temp) / "unsafe.zip"
