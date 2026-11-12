@@ -97,6 +97,80 @@ def validate_minecraft_layout(names):
     return root
 
 
+
+def validate_minecraft_archive(path, names):
+    """Validate real files and the asset-index references, not just directory names."""
+    root = validate_minecraft_layout(names)
+    prefix = "" if root == "." else root.rstrip("/") + "/"
+    with zipfile.ZipFile(path) as archive:
+        entries = {
+            info.filename.replace(chr(92), "/"): info
+            for info in archive.infolist()
+            if not info.is_dir()
+        }
+
+        def read_json(relative, limit):
+            name = prefix + relative
+            info = entries.get(name)
+            if info is None or info.file_size <= 0:
+                raise ValueError(f"Minecraft ZIP is missing a non-empty {relative}.")
+            if info.file_size > limit:
+                raise ValueError(f"Minecraft metadata is unexpectedly large: {relative}.")
+            try:
+                return json.loads(archive.read(info))
+            except (UnicodeDecodeError, json.JSONDecodeError) as error:
+                raise ValueError(f"Minecraft metadata is not valid JSON: {relative}.") from error
+
+        version_files = sorted(
+            name for name in entries
+            if name.startswith(prefix + "versions/")
+            and len(pathlib.PurePosixPath(name[len(prefix):]).parts) == 3
+            and name.endswith(".json")
+        )
+        matching_indexes = []
+        for version_file in version_files:
+            metadata = read_json(version_file[len(prefix):], 4 * 1024 * 1024)
+            asset_index = metadata.get("assetIndex") if isinstance(metadata, dict) else None
+            index_id = asset_index.get("id") if isinstance(asset_index, dict) else None
+            if isinstance(index_id, str) and index_id and "/" not in index_id and "\\\\" not in index_id:
+                index_path = f"assets/indexes/{index_id}.json"
+                if prefix + index_path in entries:
+                    matching_indexes.append(index_path)
+        if not matching_indexes:
+            raise ValueError(
+                "Minecraft version metadata does not reference an included assets/indexes/<id>.json file."
+            )
+
+        index = read_json(matching_indexes[0], 32 * 1024 * 1024)
+        objects = index.get("objects") if isinstance(index, dict) else None
+        if not isinstance(objects, dict) or not objects:
+            raise ValueError("Minecraft asset index has no asset objects.")
+        missing_objects = []
+        for logical_name, record in objects.items():
+            sha1 = record.get("hash") if isinstance(record, dict) else None
+            if not isinstance(sha1, str) or len(sha1) != 40 or any(c not in "0123456789abcdefABCDEF" for c in sha1):
+                raise ValueError(f"Minecraft asset index contains an invalid SHA-1 for {logical_name}.")
+            object_path = f"assets/objects/{sha1[:2].lower()}/{sha1.lower()}"
+            info = entries.get(prefix + object_path)
+            if info is None or info.file_size <= 0:
+                missing_objects.append(object_path)
+                if len(missing_objects) == 5:
+                    break
+        if missing_objects:
+            raise ValueError(
+                "Minecraft ZIP is missing asset objects referenced by its index: "
+                + ", ".join(missing_objects)
+            )
+
+        if not any(
+            name.startswith(prefix + "libraries/") and name.lower().endswith(".jar")
+            and info.file_size > 0
+            for name, info in entries.items()
+        ):
+            raise ValueError("Minecraft ZIP has no non-empty library JAR under libraries/.")
+
+    return root
+
 def validate_zip(path):
     if not zipfile.is_zipfile(path):
         raise ValueError(f"Not a ZIP archive: {path}")
@@ -166,7 +240,7 @@ def main():
             raise SystemExit(f"Missing Minecraft game ZIP: {minecraft}")
         try:
             minecraft_count, minecraft_names = validate_zip(minecraft)
-            minecraft_root = validate_minecraft_layout(minecraft_names)
+            minecraft_root = validate_minecraft_archive(minecraft, minecraft_names)
         except ValueError as error:
             sample = chr(10).join(minecraft_names[:40]) if "minecraft_names" in locals() else ""
             raise SystemExit(
