@@ -26,7 +26,7 @@ For Linux x86_64 and Windows x86_64, the workflow:
 
 1. Validates both ZIPs, their paths, and each native-mod bundle.
 2. Extracts the Minecraft game ZIP safely and passes its game directory to Horizon's prepare --minecraft command.
-3. Checks out the selected revision of nguyenphuck2468-tech/horizon and builds its launcher CLI.
+3. Resolves the selected Horizon ref to one immutable commit before the platform jobs start, then checks out that exact commit for both targets and records its SHA in each build report.
 4. Installs the latest published Horizon base, prepares it from the supplied Minecraft files, and invokes horizon-launcher native-build with the trusted .hnmod bundles.
 5. Publishes the actual horizon-client / horizon-client.exe binary, build logs and the original Horizon instance ZIP as separate artifacts.
 
