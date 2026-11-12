@@ -410,6 +410,18 @@ class InstanceArchiveTests(unittest.TestCase):
             self.assertEqual(archive.read_bytes(), before)
 
 
+    def test_rejects_unicode_canonical_file_parent_collisions(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = pathlib.Path(temp)
+            archive = root / "unicode-parent.zip"
+            with zipfile.ZipFile(archive, "w") as zf:
+                zf.writestr("game/caf\u00e9", b"file")
+                zf.writestr("game/cafe\u0301/child.txt", b"child")
+            with self.assertRaisesRegex(ValueError, "file/directory path collision"):
+                validate_zip(archive)
+            with self.assertRaisesRegex(SystemExit, "file/directory path collision"):
+                extract_safe(archive, root / "out")
+
     def test_rejects_unicode_canonical_equivalent_path_collisions(self):
         with tempfile.TemporaryDirectory() as temp:
             archive = pathlib.Path(temp) / "unicode-collision.zip"
