@@ -4,6 +4,7 @@ import argparse
 import hashlib
 import json
 import re
+import struct
 from pathlib import Path
 
 
@@ -30,6 +31,42 @@ def _sha256(path: Path) -> str:
         for chunk in iter(lambda: stream.read(1024 * 1024), b""):
             digest.update(chunk)
     return digest.hexdigest()
+
+
+def _verify_binary_format(path: Path, target: str) -> None:
+    """Check the executable header and machine architecture without loading the binary."""
+    size = path.stat().st_size
+    with path.open("rb") as stream:
+        if target == "linux-x86_64":
+            header = stream.read(20)
+            if len(header) < 20 or header[:4] != b"\\x7fELF":
+                raise ValueError(f"{target}: native client is not an ELF executable")
+            if header[4] != 2 or header[5] != 1:
+                raise ValueError(f"{target}: expected a 64-bit little-endian ELF executable")
+            machine = struct.unpack_from("<H", header, 18)[0]
+            if machine != 62:
+                raise ValueError(f"{target}: expected ELF x86_64 machine (62), got {machine}")
+            return
+
+        if target == "windows-x86_64":
+            dos_header = stream.read(64)
+            if len(dos_header) < 64 or dos_header[:2] != b"MZ":
+                raise ValueError(f"{target}: native client is not a PE executable")
+            pe_offset = struct.unpack_from("<I", dos_header, 0x3C)[0]
+            if pe_offset < 64 or pe_offset + 6 > size:
+                raise ValueError(f"{target}: invalid or truncated PE header offset")
+            stream.seek(pe_offset)
+            pe_header = stream.read(6)
+            if len(pe_header) != 6 or pe_header[:4] != b"PE\\x00\\x00":
+                raise ValueError(f"{target}: invalid PE signature")
+            machine = struct.unpack_from("<H", pe_header, 4)[0]
+            if machine != 0x8664:
+                raise ValueError(
+                    f"{target}: expected PE AMD64 machine (0x8664), got 0x{machine:04x}"
+                )
+            return
+
+    raise ValueError(f"unsupported native artifact target: {target}")
 
 
 def verify_artifacts(inputs: Path, linux: Path, windows: Path) -> dict:
@@ -61,6 +98,7 @@ def verify_artifacts(inputs: Path, linux: Path, windows: Path) -> dict:
         size = binary.stat().st_size
         if size <= 0:
             raise ValueError(f"{target}: native client binary is empty: {binary}")
+        _verify_binary_format(binary, target)
         verified[target] = {
             "client": client_name,
             "bytes": size,
