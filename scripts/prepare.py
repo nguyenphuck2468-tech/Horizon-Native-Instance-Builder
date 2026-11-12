@@ -10,6 +10,9 @@ DEFAULT_INSTANCE = ROOT / "input/instance/instance.zip"
 DEFAULT_MINECRAFT = ROOT / "input/minecraft/minecraft.zip"
 DEFAULT_MODS = ROOT / "input/mods"
 REPORT = ROOT / "build-report"
+MAX_ARCHIVE_ENTRIES = 100_000
+MAX_MEMBER_UNCOMPRESSED_BYTES = 2 * 1024**3
+MAX_TOTAL_UNCOMPRESSED_BYTES = 8 * 1024**3
 
 
 def digest(path):
@@ -236,6 +239,25 @@ def validate_zip(path):
         entries = z.infolist()
         if not entries:
             raise ValueError(f"Empty ZIP archive: {path}")
+        if len(entries) > MAX_ARCHIVE_ENTRIES:
+            raise ValueError(
+                f"ZIP archive has too many entries: {len(entries)} "
+                f"(limit {MAX_ARCHIVE_ENTRIES})"
+            )
+        total_uncompressed = 0
+        for item in entries:
+            if item.is_dir():
+                continue
+            if item.file_size < 0 or item.file_size > MAX_MEMBER_UNCOMPRESSED_BYTES:
+                raise ValueError(
+                    f"ZIP member exceeds the uncompressed size limit: {item.filename}"
+                )
+            total_uncompressed += item.file_size
+            if total_uncompressed > MAX_TOTAL_UNCOMPRESSED_BYTES:
+                raise ValueError(
+                    "ZIP archive exceeds the total uncompressed size limit "
+                    f"({MAX_TOTAL_UNCOMPRESSED_BYTES} bytes)"
+                )
         names = []
         seen = set()
         seen_casefold = set()
