@@ -243,6 +243,23 @@ class InstanceArchiveTests(unittest.TestCase):
             with self.assertRaisesRegex(SystemExit, "Case-insensitive ZIP path collision"):
                 extract_safe(archive, root / "out")
 
+    def test_rejects_windows_alternate_stream_device_and_alias_paths(self):
+        for unsafe_name in (
+            "game/mods/payload:stream",
+            "game/CON.txt",
+            "game/mods/trailing.",
+            "game/mods/trailing ",
+        ):
+            with self.subTest(path=unsafe_name), tempfile.TemporaryDirectory() as temp:
+                root = pathlib.Path(temp)
+                archive = root / "windows-path.zip"
+                with zipfile.ZipFile(archive, "w") as zf:
+                    zf.writestr(unsafe_name, b"unsafe")
+                with self.assertRaisesRegex(ValueError, "Unsafe ZIP path"):
+                    validate_zip(archive)
+                with self.assertRaisesRegex(SystemExit, "Unsafe ZIP path"):
+                    extract_safe(archive, root / "out")
+
     def test_rejects_path_traversal(self):
         with tempfile.TemporaryDirectory() as temp:
             archive = pathlib.Path(temp) / "unsafe.zip"
