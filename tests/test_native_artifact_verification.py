@@ -28,14 +28,14 @@ class NativeArtifactVerificationTests(unittest.TestCase):
             runtime.mkdir()
             if target == "linux-x86_64":
                 binary = bytearray(64)
-                binary[:4] = b"\\x7fELF"
+                binary[:4] = b"\x7fELF"
                 binary[4:7] = bytes((2, 1, 1))
                 struct.pack_into("<H", binary, 18, 62)
             else:
                 binary = bytearray(0x86)
                 binary[:2] = b"MZ"
                 struct.pack_into("<I", binary, 0x3C, 0x80)
-                binary[0x80:0x84] = b"PE\\x00\\x00"
+                binary[0x80:0x84] = b"PE\x00\x00"
                 struct.pack_into("<H", binary, 0x84, 0x8664)
             runtime.joinpath(client).write_bytes(binary)
         return inputs, linux, windows
