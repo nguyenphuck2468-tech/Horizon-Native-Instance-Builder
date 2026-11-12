@@ -170,6 +170,19 @@ def validate_minecraft_archive(path, names):
                     missing_objects.append(object_path)
                     if len(missing_objects) == 5:
                         break
+                    continue
+                # Mojang's asset index pins each object by SHA-1. Presence alone
+                # is insufficient: a truncated or substituted file must fail
+                # before extraction/preparation. Stream large assets to bound RAM.
+                actual_hash = hashlib.sha1()
+                with archive.open(info) as asset_file:
+                    for chunk in iter(lambda: asset_file.read(1024 * 1024), b""):
+                        actual_hash.update(chunk)
+                if actual_hash.hexdigest() != sha1.lower():
+                    raise ValueError(
+                        f"Minecraft asset object has a SHA-1 mismatch: {object_path} "
+                        f"(expected {sha1.lower()}, got {actual_hash.hexdigest()})."
+                    )
             if missing_objects:
                 raise ValueError(
                     f"Minecraft ZIP is missing asset objects referenced by {index_path}: "
