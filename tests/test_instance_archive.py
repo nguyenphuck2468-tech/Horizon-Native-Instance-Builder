@@ -3,7 +3,7 @@ import tempfile
 import unittest
 import zipfile
 
-from scripts.prepare import discover_minecraft_root, validate_zip
+from scripts.prepare import discover_minecraft_root, validate_minecraft_layout, validate_zip
 from scripts.extract_instance import extract_safe
 
 
@@ -12,8 +12,19 @@ class InstanceArchiveTests(unittest.TestCase):
         names = [
             "export/.minecraft/versions/26.3/26.3.json",
             "export/.minecraft/assets/indexes/26.json",
+            "export/.minecraft/assets/objects/ab/cdef",
+            "export/.minecraft/libraries/org/example/library/1.0/library-1.0.jar",
         ]
         self.assertEqual(discover_minecraft_root(names), "export/.minecraft")
+        self.assertEqual(validate_minecraft_layout(names), "export/.minecraft")
+
+    def test_rejects_incomplete_minecraft_game_directory(self):
+        names = [
+            "game/versions/26.3/26.3.json",
+            "game/assets/indexes/26.json",
+        ]
+        with self.assertRaisesRegex(ValueError, "assets/objects"):
+            validate_minecraft_layout(names)
 
     def test_rejects_manifest_only_modpack_zip(self):
         with tempfile.TemporaryDirectory() as temp:
