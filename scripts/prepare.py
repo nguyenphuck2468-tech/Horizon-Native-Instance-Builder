@@ -324,6 +324,12 @@ def validate_zip(path):
             mode = (item.external_attr >> 16) & 0o170000
             if mode == 0o120000:
                 raise ValueError(f"Symlink entry refused: {item.filename}")
+            if mode not in (0, 0o100000, 0o040000):
+                raise ValueError(f"Unsupported special ZIP entry refused: {item.filename}")
+            if mode == 0o040000 and not is_directory:
+                raise ValueError(f"ZIP directory mode/name mismatch: {item.filename}")
+            if mode == 0o100000 and is_directory:
+                raise ValueError(f"ZIP file mode/name mismatch: {item.filename}")
             names.append(name)
         return len(entries), names
 
