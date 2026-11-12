@@ -8,6 +8,26 @@ MAX_ARCHIVE_ENTRIES = 100_000
 MAX_MEMBER_UNCOMPRESSED_BYTES = 2 * 1024**3
 MAX_TOTAL_UNCOMPRESSED_BYTES = 8 * 1024**3
 
+WINDOWS_RESERVED_NAMES = {
+    "CON", "PRN", "AUX", "NUL",
+    *(f"COM{number}" for number in range(1, 10)),
+    *(f"LPT{number}" for number in range(1, 10)),
+    "COM¹", "COM²", "COM³", "LPT¹", "LPT²", "LPT³",
+}
+
+
+def _portable_windows_component(part):
+    """Reject names that alias devices or alternate streams on Windows."""
+    stem = part.split(".", 1)[0].upper()
+    return (
+        bool(part)
+        and not part.endswith((" ", "."))
+        and not any(ord(char) < 32 or char in '<>:"|?*' for char in part)
+        and stem not in WINDOWS_RESERVED_NAMES
+    )
+
+
+
 def find_minecraft_root(root: pathlib.Path) -> pathlib.Path:
     candidates = set()
     for metadata in root.rglob("*.json"):
@@ -68,7 +88,7 @@ def extract_safe(archive: pathlib.Path, destination: pathlib.Path) -> pathlib.Pa
                 or raw_name.startswith("/")
                 or chr(0) in raw_name
                 or ".." in path.parts
-                or (path.parts and ":" in path.parts[0])
+                or any(not _portable_windows_component(part) for part in path.parts)
             ):
                 raise SystemExit(f"Unsafe ZIP path: {info.filename}")
             normalized = "/".join(path.parts)
