@@ -176,6 +176,34 @@ class InstanceArchiveTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "versions"):
                 discover_minecraft_root(names)
 
+    def test_rejects_file_used_as_parent_directory(self):
+        with tempfile.TemporaryDirectory() as temp:
+            archive = pathlib.Path(temp) / "file-parent.zip"
+            with zipfile.ZipFile(archive, "w") as zf:
+                zf.writestr("game/mods", b"not a directory")
+                zf.writestr("game/mods/example.jar", b"child")
+            with self.assertRaisesRegex(ValueError, "file/directory path collision"):
+                validate_zip(archive)
+
+    def test_rejects_directory_replaced_by_file(self):
+        with tempfile.TemporaryDirectory() as temp:
+            archive = pathlib.Path(temp) / "directory-file.zip"
+            with zipfile.ZipFile(archive, "w") as zf:
+                zf.writestr("game/mods/example.jar", b"child")
+                zf.writestr("game/mods", b"not a directory")
+            with self.assertRaisesRegex(ValueError, "file/directory path collision"):
+                validate_zip(archive)
+
+    def test_extractor_rejects_file_used_as_parent_directory(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = pathlib.Path(temp)
+            archive = root / "file-parent.zip"
+            with zipfile.ZipFile(archive, "w") as zf:
+                zf.writestr("game/mods", b"not a directory")
+                zf.writestr("game/mods/example.jar", b"child")
+            with self.assertRaisesRegex(SystemExit, "file/directory path collision"):
+                extract_safe(archive, root / "out")
+
     def test_rejects_case_insensitive_path_collisions(self):
         with tempfile.TemporaryDirectory() as temp:
             archive = pathlib.Path(temp) / "case-collision.zip"
