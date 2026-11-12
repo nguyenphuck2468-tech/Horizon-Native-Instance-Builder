@@ -65,6 +65,126 @@ def discover_minecraft_root(names):
     return ranked[0] or "."
 
 
+def validate_minecraft_layout(names):
+    """Require the game files the native preparer actually consumes."""
+    root = discover_minecraft_root(names)
+    prefix = "" if root == "." else root.rstrip("/") + "/"
+    scoped = {
+        name[len(prefix):]
+        for name in names
+        if name.startswith(prefix)
+    }
+    versions = set()
+    for name in scoped:
+        parts = pathlib.PurePosixPath(name).parts
+        if (len(parts) == 3 and parts[0] == "versions"
+                and parts[2] == parts[1] + ".json"):
+            versions.add(parts[1])
+    if not versions:
+        raise ValueError("Minecraft game root has no versions/<version>/<version>.json metadata.")
+    missing = []
+    if not any(name.startswith("assets/indexes/") and name.endswith(".json") for name in scoped):
+        missing.append("assets/indexes/*.json")
+    if not any(name.startswith("assets/objects/") for name in scoped):
+        missing.append("assets/objects/")
+    if not any(name.startswith("libraries/") for name in scoped):
+        missing.append("libraries/")
+    if missing:
+        raise ValueError(
+            "Minecraft ZIP is incomplete; missing " + ", ".join(missing)
+            + ". Supply a full game directory, not only version metadata or a launcher backup."
+        )
+    return root
+
+
+
+def validate_minecraft_archive(path, names):
+    """Validate real files and the asset-index references, not just directory names."""
+    root = discover_minecraft_root(names)
+    prefix = "" if root == "." else root.rstrip("/") + "/"
+    with zipfile.ZipFile(path) as archive:
+        entries = {
+            info.filename.replace(chr(92), "/"): info
+            for info in archive.infolist()
+            if not info.is_dir()
+        }
+
+        def read_json(relative, limit):
+            name = prefix + relative
+            info = entries.get(name)
+            if info is None or info.file_size <= 0:
+                raise ValueError(f"Minecraft ZIP is missing a non-empty {relative}.")
+            if info.file_size > limit:
+                raise ValueError(f"Minecraft metadata is unexpectedly large: {relative}.")
+            try:
+                return json.loads(archive.read(info))
+            except (UnicodeDecodeError, json.JSONDecodeError) as error:
+                raise ValueError(f"Minecraft metadata is not valid JSON: {relative}.") from error
+
+        version_files = sorted(
+            name for name in entries
+            if name.startswith(prefix + "versions/")
+            and len(pathlib.PurePosixPath(name[len(prefix):]).parts) == 3
+            and name.endswith(".json")
+        )
+        matching_indexes = set()
+        for version_file in version_files:
+            relative_version = version_file[len(prefix):]
+            version_parts = pathlib.PurePosixPath(relative_version).parts
+            if len(version_parts) != 3 or version_parts[2] != version_parts[1] + ".json":
+                continue
+            metadata = read_json(relative_version, 4 * 1024 * 1024)
+            if not isinstance(metadata, dict):
+                raise ValueError(f"Minecraft version metadata is not an object: {relative_version}.")
+            asset_index = metadata.get("assetIndex")
+            index_id = asset_index.get("id") if isinstance(asset_index, dict) else None
+            if (not isinstance(index_id, str) or not index_id
+                    or "/" in index_id or "\\" in index_id or index_id in {".", ".."}):
+                raise ValueError(f"Minecraft version metadata has an invalid asset index id: {relative_version}.")
+            index_path = f"assets/indexes/{index_id}.json"
+            if prefix + index_path not in entries:
+                raise ValueError(
+                    f"Minecraft version metadata references a missing asset index: {index_path}."
+                )
+            matching_indexes.add(index_path)
+        if not matching_indexes:
+            raise ValueError(
+                "Minecraft version metadata does not reference an included assets/indexes/<id>.json file."
+            )
+
+        # A ZIP may contain several game versions. Validate every distinct index they reference,
+        # not just the first one, or an incomplete secondary version could pass preparation.
+        for index_path in sorted(matching_indexes):
+            index = read_json(index_path, 32 * 1024 * 1024)
+            objects = index.get("objects") if isinstance(index, dict) else None
+            if not isinstance(objects, dict) or not objects:
+                raise ValueError(f"Minecraft asset index has no asset objects: {index_path}.")
+            missing_objects = []
+            for logical_name, record in objects.items():
+                sha1 = record.get("hash") if isinstance(record, dict) else None
+                if not isinstance(sha1, str) or len(sha1) != 40 or any(c not in "0123456789abcdefABCDEF" for c in sha1):
+                    raise ValueError(f"Minecraft asset index contains an invalid SHA-1 for {logical_name}.")
+                object_path = f"assets/objects/{sha1[:2].lower()}/{sha1.lower()}"
+                info = entries.get(prefix + object_path)
+                if info is None or info.file_size <= 0:
+                    missing_objects.append(object_path)
+                    if len(missing_objects) == 5:
+                        break
+            if missing_objects:
+                raise ValueError(
+                    f"Minecraft ZIP is missing asset objects referenced by {index_path}: "
+                    + ", ".join(missing_objects)
+                )
+
+        if not any(
+            name.startswith(prefix + "libraries/") and name.lower().endswith(".jar")
+            and info.file_size > 0
+            for name, info in entries.items()
+        ):
+            raise ValueError("Minecraft ZIP has no non-empty library JAR under libraries/.")
+
+    return root
+
 def validate_zip(path):
     if not zipfile.is_zipfile(path):
         raise ValueError(f"Not a ZIP archive: {path}")
@@ -134,7 +254,7 @@ def main():
             raise SystemExit(f"Missing Minecraft game ZIP: {minecraft}")
         try:
             minecraft_count, minecraft_names = validate_zip(minecraft)
-            minecraft_root = discover_minecraft_root(minecraft_names)
+            minecraft_root = validate_minecraft_archive(minecraft, minecraft_names)
         except ValueError as error:
             sample = chr(10).join(minecraft_names[:40]) if "minecraft_names" in locals() else ""
             raise SystemExit(

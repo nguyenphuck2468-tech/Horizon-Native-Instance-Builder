@@ -5,7 +5,7 @@ Implemented in the workflow:
 - The Horizon instance/data backup ZIP and Minecraft game ZIP are separate inputs.
 - The Horizon backup is preserved byte-for-byte; it is not treated as a Minecraft installation.
 - ZIP path traversal, duplicate normalized paths and symlink entries are rejected.
-- The Minecraft ZIP must contain a versions/<version>/<version>.json layout.
+- The Minecraft ZIP must contain valid version metadata that references an included asset index; every object listed by that index must exist as a non-empty file, and at least one non-empty library JAR must be present. Metadata-only, directory-only and partial asset exports are rejected before extraction.
 - The Minecraft archive is extracted safely and its game directory is passed to Horizon's prepare --minecraft.
 - One or more .hnmod files are validated for horizon-native.json and horizon-mixin.toml.
 - SHA-256 input manifest is generated.
@@ -16,7 +16,7 @@ Implemented in the workflow:
 
 Still requires a real Actions run to certify:
 
-- Whether the supplied Minecraft ZIP contains all game files pinned by the selected Horizon release.
+- Whether the supplied Minecraft ZIP contains every additional game file pinned by the selected Horizon release.
 - Whether the selected native-mod bundles build successfully on both hosted platforms.
 - Whether the resulting binaries import and launch correctly on a user's machine with a compatible prepared base release.
 
