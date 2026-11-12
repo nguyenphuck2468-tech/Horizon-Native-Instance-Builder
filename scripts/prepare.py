@@ -238,6 +238,7 @@ def validate_zip(path):
             raise ValueError(f"Empty ZIP archive: {path}")
         names = []
         seen = set()
+        seen_casefold = set()
         for item in entries:
             raw_name = item.filename.replace(chr(92), "/")
             parts = pathlib.PurePosixPath(raw_name).parts
@@ -247,7 +248,13 @@ def validate_zip(path):
             name = "/".join(parts)
             if name in seen:
                 raise ValueError(f"Duplicate ZIP path after normalization: {item.filename}")
+            folded = name.casefold()
+            if folded in seen_casefold:
+                raise ValueError(
+                    f"Case-insensitive ZIP path collision: {item.filename}"
+                )
             seen.add(name)
+            seen_casefold.add(folded)
             mode = (item.external_attr >> 16) & 0o170000
             if mode == 0o120000:
                 raise ValueError(f"Symlink entry refused: {item.filename}")
