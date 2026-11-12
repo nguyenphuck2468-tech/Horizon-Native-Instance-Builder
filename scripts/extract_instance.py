@@ -4,6 +4,10 @@ import argparse
 import pathlib
 import zipfile
 
+MAX_ARCHIVE_ENTRIES = 100_000
+MAX_MEMBER_UNCOMPRESSED_BYTES = 2 * 1024**3
+MAX_TOTAL_UNCOMPRESSED_BYTES = 8 * 1024**3
+
 def find_minecraft_root(root: pathlib.Path) -> pathlib.Path:
     candidates = set()
     for metadata in root.rglob("*.json"):
@@ -30,8 +34,27 @@ def extract_safe(archive: pathlib.Path, destination: pathlib.Path) -> pathlib.Pa
     files = set()
     files_casefold = set()
     with zipfile.ZipFile(archive) as zf:
-        for info in zf.infolist():
+        entries = zf.infolist()
+        if len(entries) > MAX_ARCHIVE_ENTRIES:
+            raise SystemExit(
+                f"ZIP archive has too many entries: {len(entries)} "
+                f"(limit {MAX_ARCHIVE_ENTRIES})"
+            )
+        total_uncompressed = 0
+        for info in entries:
             raw_name = info.filename.replace(chr(92), "/")
+            is_directory = info.is_dir() or raw_name.endswith("/")
+            if not is_directory:
+                if info.file_size < 0 or info.file_size > MAX_MEMBER_UNCOMPRESSED_BYTES:
+                    raise SystemExit(
+                        f"ZIP member exceeds the uncompressed size limit: {info.filename}"
+                    )
+                total_uncompressed += info.file_size
+                if total_uncompressed > MAX_TOTAL_UNCOMPRESSED_BYTES:
+                    raise SystemExit(
+                        "ZIP archive exceeds the total uncompressed size limit "
+                        f"({MAX_TOTAL_UNCOMPRESSED_BYTES} bytes)"
+                    )
             path = pathlib.PurePosixPath(raw_name)
             if (not path.parts or raw_name.startswith("/") or chr(0) in raw_name or
                 ".." in path.parts or (path.parts and ":" in path.parts[0])):
@@ -51,7 +74,6 @@ def extract_safe(archive: pathlib.Path, destination: pathlib.Path) -> pathlib.Pa
                 raise SystemExit(
                     f"ZIP file/directory path collision: {info.filename} is below file {conflicting_parent}"
                 )
-            is_directory = info.is_dir() or raw_name.endswith("/")
             if not is_directory and any(
                 existing.startswith(folded + "/") for existing in seen_casefold
             ):
