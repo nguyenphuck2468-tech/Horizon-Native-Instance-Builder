@@ -146,24 +146,50 @@ def extract_safe(archive: pathlib.Path, destination: pathlib.Path) -> pathlib.Pa
         destination.mkdir(parents=True, exist_ok=True)
         root = destination.resolve()
 
-        for info, path, is_directory in validated_entries:
-            target = root.joinpath(*path.parts)
-            current = root
-            for part in path.parts:
-                current = current / part
-                if current.is_symlink():
-                    raise SystemExit(
-                        f"Existing symlink in extraction path refused: {current}"
-                    )
-            if is_directory:
-                target.mkdir(parents=True, exist_ok=True)
-                continue
-            target.parent.mkdir(parents=True, exist_ok=True)
-            with zf.open(info) as source, target.open("xb") as output:
-                while chunk := source.read(1024 * 1024):
-                    output.write(chunk)
+        created_files = []
+        created_directories = []
 
-    return find_minecraft_root(root)
+        def ensure_directory(path):
+            missing = []
+            current = path
+            while current != root and not current.exists():
+                missing.append(current)
+                current = current.parent
+            path.mkdir(parents=True, exist_ok=True)
+            created_directories.extend(reversed(missing))
+
+        try:
+            for info, path, is_directory in validated_entries:
+                target = root.joinpath(*path.parts)
+                current = root
+                for part in path.parts:
+                    current = current / part
+                    if current.is_symlink():
+                        raise SystemExit(
+                            f"Existing symlink in extraction path refused: {current}"
+                        )
+                if is_directory:
+                    ensure_directory(target)
+                    continue
+                ensure_directory(target.parent)
+                with zf.open(info) as source:
+                    with target.open("xb") as output:
+                        created_files.append(target)
+                        while chunk := source.read(1024 * 1024):
+                            output.write(chunk)
+
+            return find_minecraft_root(root)
+        except BaseException:
+            # Extraction is exclusive: only remove files and directories created by this
+            # invocation, never pre-existing destination content.
+            for created in reversed(created_files):
+                created.unlink(missing_ok=True)
+            for created in reversed(created_directories):
+                try:
+                    created.rmdir()
+                except OSError:
+                    pass
+            raise
 
 def main():
     parser = argparse.ArgumentParser()
