@@ -1,13 +1,17 @@
 import hashlib
 import json
+import os
 import pathlib
+import stat
+import subprocess
 import tempfile
+from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 import zipfile
 
 from scripts.prepare import discover_minecraft_root, validate_minecraft_archive, validate_minecraft_layout, validate_zip
-from scripts.extract_instance import extract_safe
+from scripts.extract_instance import extract_safe, _metadata_is_link_or_reparse_point
 
 
 class InstanceArchiveTests(unittest.TestCase):
@@ -548,6 +552,55 @@ class InstanceArchiveTests(unittest.TestCase):
             with patch.object(zipfile.ZipFile, "infolist", encrypted_infolist):
                 with self.assertRaisesRegex(SystemExit, "Encrypted ZIP entry"):
                     extract_safe(archive, root / "out")
+
+    def test_reparse_point_attribute_is_rejected_without_symlink_mode(self):
+        metadata = SimpleNamespace(st_mode=stat.S_IFDIR | 0o755, st_file_attributes=0x400)
+        self.assertTrue(_metadata_is_link_or_reparse_point(metadata))
+
+    @unittest.skipUnless(os.name == "nt", "Windows junction behavior is platform-specific")
+    def test_extractor_rejects_windows_junctions(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = pathlib.Path(temp)
+            archive = root / "junction.zip"
+            with zipfile.ZipFile(archive, "w") as zf:
+                zf.writestr("game/versions/26.3/26.3.json", "{}")
+                zf.writestr("game/payload.txt", b"must not follow a junction")
+
+            outside = root / "outside"
+            outside.mkdir()
+            destination_junction = root / "destination-junction"
+            created = subprocess.run(
+                ["cmd", "/c", "mklink", "/J", str(destination_junction), str(outside)],
+                capture_output=True,
+                text=True,
+            )
+            if created.returncode != 0:
+                self.skipTest(f"could not create a Windows directory junction: {created.stderr}")
+            try:
+                with self.assertRaisesRegex(SystemExit, "reparse-point extraction destination"):
+                    extract_safe(archive, destination_junction)
+                self.assertFalse((outside / "game").exists())
+            finally:
+                destination_junction.rmdir()
+
+            destination = root / "out"
+            destination.mkdir()
+            real_directory = destination / "real"
+            real_directory.mkdir()
+            nested_junction = destination / "game"
+            created = subprocess.run(
+                ["cmd", "/c", "mklink", "/J", str(nested_junction), str(real_directory)],
+                capture_output=True,
+                text=True,
+            )
+            if created.returncode != 0:
+                self.skipTest(f"could not create a nested Windows junction: {created.stderr}")
+            try:
+                with self.assertRaisesRegex(SystemExit, "reparse point in extraction path"):
+                    extract_safe(archive, destination)
+                self.assertFalse((real_directory / "payload.txt").exists())
+            finally:
+                nested_junction.rmdir()
 
     def test_extracts_game_folder_without_changing_archive(self):
         with tempfile.TemporaryDirectory() as temp:

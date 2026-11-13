@@ -2,6 +2,7 @@
 """Safely unpack a Minecraft game folder from the supplied instance ZIP."""
 import argparse
 import pathlib
+import stat
 import unicodedata
 import zipfile
 
@@ -29,6 +30,21 @@ def _portable_windows_component(part):
 
 
 
+def _metadata_is_link_or_reparse_point(metadata):
+    """Recognize POSIX symlinks and Windows reparse points (including junctions)."""
+    return stat.S_ISLNK(metadata.st_mode) or bool(
+        getattr(metadata, "st_file_attributes", 0) & 0x400
+    )
+
+
+def _is_link_or_reparse_point(path):
+    try:
+        metadata = path.lstat()
+    except FileNotFoundError:
+        return False
+    return _metadata_is_link_or_reparse_point(metadata)
+
+
 def _collision_key(value):
     """Normalize canonical Unicode equivalents before case-insensitive comparison."""
     normalized = unicodedata.normalize("NFC", value)
@@ -54,10 +70,12 @@ def find_minecraft_root(root: pathlib.Path) -> pathlib.Path:
     return ranked[0]
 
 def extract_safe(archive: pathlib.Path, destination: pathlib.Path) -> pathlib.Path:
-    # Do not resolve through a destination symlink: doing so would silently redirect
-    # extraction outside the caller-selected output directory.
-    if destination.is_symlink():
-        raise SystemExit(f"Existing symlink extraction destination refused: {destination}")
+    # Path.is_symlink() misses Windows junctions. Reject reparse points before resolve()
+    # can silently redirect the caller-selected destination.
+    if _is_link_or_reparse_point(destination):
+        raise SystemExit(
+            f"Existing symlink or reparse-point extraction destination refused: {destination}"
+        )
     # Resolve without creating the destination. An invalid archive must not leave
     # even an empty output directory behind.
     root = destination.resolve()
@@ -182,9 +200,11 @@ def extract_safe(archive: pathlib.Path, destination: pathlib.Path) -> pathlib.Pa
                 current = root
                 for part in path.parts:
                     current = current / part
-                    if current.is_symlink():
+                    # Recheck every existing component immediately before writing. This
+                    # includes junctions and other Windows reparse points, not just symlinks.
+                    if _is_link_or_reparse_point(current):
                         raise SystemExit(
-                            f"Existing symlink in extraction path refused: {current}"
+                            f"Existing symlink or reparse point in extraction path refused: {current}"
                         )
                 if is_directory:
                     ensure_directory(target)
