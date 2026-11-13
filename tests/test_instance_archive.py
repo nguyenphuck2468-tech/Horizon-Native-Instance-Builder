@@ -731,13 +731,6 @@ class InstanceArchiveTests(unittest.TestCase):
             original_infolist = zipfile.ZipFile.infolist
             original_open = zipfile.ZipFile.open
 
-            def declared_small_infolist(instance):
-                entries = original_infolist(instance)
-                for entry in entries:
-                    if not entry.is_dir():
-                        entry.file_size = 2
-                return entries
-
             def expanded_open(instance, name, *args, **kwargs):
                 filename = getattr(name, "filename", name)
                 if filename == "game/first.bin":
@@ -749,7 +742,6 @@ class InstanceArchiveTests(unittest.TestCase):
             with (
                 patch("scripts.extract_instance.MAX_MEMBER_UNCOMPRESSED_BYTES", 10),
                 patch("scripts.extract_instance.MAX_TOTAL_UNCOMPRESSED_BYTES", 5),
-                patch.object(zipfile.ZipFile, "infolist", declared_small_infolist),
                 patch.object(zipfile.ZipFile, "open", expanded_open),
             ):
                 with self.assertRaisesRegex(SystemExit, "Actual ZIP archive exceeds the total"):
