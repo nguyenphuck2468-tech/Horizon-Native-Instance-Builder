@@ -683,10 +683,6 @@ class InstanceArchiveTests(unittest.TestCase):
             with self.assertRaisesRegex(SystemExit, "Case-insensitive ZIP path collision"):
                 extract_safe(archive, root / "out")
 
-
-if __name__ == "__main__":
-    unittest.main()
-
     def test_extractor_rejects_actual_member_size_above_declared_size(self):
         with tempfile.TemporaryDirectory() as temp:
             root = pathlib.Path(temp)
@@ -708,3 +704,7 @@ if __name__ == "__main__":
 
             self.assertFalse(destination.exists())
             self.assertFalse((root / "game").exists())
+
+
+if __name__ == "__main__":
+    unittest.main()
