@@ -480,6 +480,29 @@ class InstanceArchiveTests(unittest.TestCase):
             self.assertFalse((destination / "game").exists())
             self.assertEqual(list(destination.iterdir()), [sentinel])
 
+    def test_extractor_rolls_back_partially_created_destination_on_mkdir_failure(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = pathlib.Path(temp)
+            archive = root / "instance.zip"
+            destination = root / "new" / "nested" / "out"
+            with zipfile.ZipFile(archive, "w") as zf:
+                zf.writestr("game/versions/26.3/26.3.json", "{}")
+
+            original_mkdir = pathlib.Path.mkdir
+
+            def fail_after_creating_parents(path, *args, **kwargs):
+                if path == destination:
+                    original_mkdir(path.parent, parents=True, exist_ok=True)
+                    raise OSError("simulated destination mkdir failure")
+                return original_mkdir(path, *args, **kwargs)
+
+            with patch.object(pathlib.Path, "mkdir", fail_after_creating_parents):
+                with self.assertRaisesRegex(OSError, "simulated destination mkdir"):
+                    extract_safe(archive, destination)
+
+            self.assertFalse(destination.exists())
+            self.assertFalse((root / "new").exists())
+
     def test_extractor_removes_new_destination_after_midstream_failure(self):
         with tempfile.TemporaryDirectory() as temp:
             root = pathlib.Path(temp)

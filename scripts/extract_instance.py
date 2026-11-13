@@ -250,22 +250,24 @@ def extract_safe(archive: pathlib.Path, destination: pathlib.Path) -> pathlib.Pa
         while current != current.parent and not current.exists():
             destination_missing.append(current)
             current = current.parent
-        destination.mkdir(parents=True, exist_ok=True)
-        root = destination.resolve()
-
         created_files = []
         created_directories = list(reversed(destination_missing))
 
-        def ensure_directory(path):
-            missing = []
-            current = path
-            while current != root and not current.exists():
-                missing.append(current)
-                current = current.parent
-            path.mkdir(parents=True, exist_ok=True)
-            created_directories.extend(reversed(missing))
-
         try:
+            # Include destination creation in the rollback scope: mkdir(parents=True)
+            # can create some ancestors before failing on a later component.
+            destination.mkdir(parents=True, exist_ok=True)
+            root = destination.resolve()
+
+            def ensure_directory(path):
+                missing = []
+                current = path
+                while current != root and not current.exists():
+                    missing.append(current)
+                    current = current.parent
+                path.mkdir(parents=True, exist_ok=True)
+                created_directories.extend(reversed(missing))
+
             _validate_existing_destination_collisions(root, validated_entries)
             actual_total_uncompressed = 0
             for info, path, is_directory in validated_entries:
