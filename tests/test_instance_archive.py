@@ -723,8 +723,8 @@ class InstanceArchiveTests(unittest.TestCase):
             archive = root / "lying-total-size.zip"
             destination = root / "out"
             with zipfile.ZipFile(archive, "w") as zf:
-                zf.writestr("game/first.bin", b"aa")
-                zf.writestr("game/second.bin", b"bb")
+                zf.writestr("game/first.bin", b"111")
+                zf.writestr("game/second.bin", b"222")
 
             import io
 
