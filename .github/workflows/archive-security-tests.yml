@@ -1,0 +1,45 @@
+name: Archive security tests
+
+on:
+  pull_request:
+    paths:
+      - "scripts/**"
+      - "tests/**"
+      - ".github/workflows/archive-security-tests.yml"
+  push:
+    branches:
+      - main
+      - hardening/case-insensitive-zip-paths
+    paths:
+      - "scripts/**"
+      - "tests/**"
+      - ".github/workflows/archive-security-tests.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: archive-security-tests-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  archive-tests:
+    name: Python archive tests (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-latest
+          - windows-latest
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Run archive validation and extraction tests
+        run: python -m unittest discover -s tests -v
