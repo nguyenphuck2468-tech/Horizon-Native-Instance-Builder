@@ -2,6 +2,7 @@ import tempfile
 import struct
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from scripts.verify_native_artifacts import verify_artifacts
 
