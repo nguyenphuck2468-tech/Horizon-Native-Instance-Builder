@@ -2,6 +2,8 @@
 
 A forkable GitHub Actions project. It consumes two different ZIP files: a Horizon instance/data backup and a full Minecraft game directory. Native mods are one or more .hnmod files.
 
+**Start here:** [Vietnamese usage guide](docs/HUONG-DAN.md).
+
 ## Input layout
 
     input/
@@ -18,7 +20,9 @@ The existing Horizon instance ZIP is preserved byte-for-byte as a separate artif
 
 The native build also needs a separate Minecraft game ZIP. It must contain the official game-file layout, including versions/<version>/<version>.json and the matching assets/libraries. A complete .minecraft directory is suitable. A Horizon data backup, or a Modrinth/CurseForge export containing only a manifest and overrides, is not a substitute.
 
-Put trusted .hnmod files in input/mods/. Then run Actions → Build Horizon Native Instance → Run workflow. The workflow can also download the two ZIPs from Release assets in this repository: set instance_release_tag / instance_asset_name for the Horizon backup and minecraft_release_tag / minecraft_asset_name for the Minecraft game ZIP. Large game directories should be stored as Release assets rather than committed to Git history.
+Put trusted .hnmod files in input/mods/. Then run Actions → Build Horizon Native Instance → Run workflow. The workflow can download the Horizon backup from this repository's Release assets using instance_release_tag / instance_asset_name. For the Minecraft ZIP, set minecraft_release_tag / minecraft_asset_name and optionally minecraft_source_repository. If the source repository differs from this repository, add the MINECRAFT_INPUTS_TOKEN Actions secret with read-only Contents access to that source repository.
+
+**Important:** this repository is public. Do not upload a copyrighted Minecraft game archive to a public Release asset. Store the game ZIP as an asset in a separate private repository and use minecraft_source_repository plus MINECRAFT_INPUTS_TOKEN.
 
 ## What the workflow builds
 
@@ -46,7 +50,7 @@ Linux x86_64 and Windows x86_64. macOS is deferred until its hosted build path i
 
 ## Security
 
-.hnmod contains native code and is not sandboxed. Build only mods whose source you have read and trust. The workflow uses ephemeral GitHub-hosted runners, read-only repository permissions, no secrets, and no persisted checkout credentials.
+.hnmod contains native code and is not sandboxed. Build only mods whose source you have read and trust. The workflow uses ephemeral GitHub-hosted runners, read-only repository permissions and no persisted checkout credentials. An optional MINECRAFT_INPUTS_TOKEN is used only by the validation job to download a Release asset from a separate private input repository; it is not passed to the native build job.
 
 ## Experimental status
 
