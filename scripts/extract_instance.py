@@ -267,6 +267,7 @@ def extract_safe(archive: pathlib.Path, destination: pathlib.Path) -> pathlib.Pa
 
         try:
             _validate_existing_destination_collisions(root, validated_entries)
+            actual_total_uncompressed = 0
             for info, path, is_directory in validated_entries:
                 target = root.joinpath(*path.parts)
                 current = root
@@ -282,11 +283,31 @@ def extract_safe(archive: pathlib.Path, destination: pathlib.Path) -> pathlib.Pa
                     ensure_directory(target)
                     continue
                 ensure_directory(target.parent)
+                actual_member_uncompressed = 0
                 with zf.open(info) as source:
                     with target.open("xb") as output:
                         created_files.append(target)
                         while chunk := source.read(1024 * 1024):
+                            actual_member_uncompressed += len(chunk)
+                            actual_total_uncompressed += len(chunk)
+                            if actual_member_uncompressed > MAX_MEMBER_UNCOMPRESSED_BYTES:
+                                raise SystemExit(
+                                    f"Actual ZIP member exceeds the uncompressed size limit: {info.filename}"
+                                )
+                            if actual_member_uncompressed > info.file_size:
+                                raise SystemExit(
+                                    f"ZIP member expands beyond its declared size: {info.filename}"
+                                )
+                            if actual_total_uncompressed > MAX_TOTAL_UNCOMPRESSED_BYTES:
+                                raise SystemExit(
+                                    "Actual ZIP archive exceeds the total uncompressed size limit "
+                                    f"({MAX_TOTAL_UNCOMPRESSED_BYTES} bytes)"
+                                )
                             output.write(chunk)
+                if actual_member_uncompressed != info.file_size:
+                    raise SystemExit(
+                        f"ZIP member size does not match its declared size: {info.filename}"
+                    )
 
             archive_files = [path.as_posix() for _, path, is_directory in validated_entries if not is_directory]
             return find_minecraft_root(root, archive_files)
