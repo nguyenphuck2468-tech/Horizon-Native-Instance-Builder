@@ -243,6 +243,45 @@ class InstanceArchiveTests(unittest.TestCase):
             with self.assertRaisesRegex(SystemExit, "Case-insensitive ZIP path collision"):
                 extract_safe(archive, root / "out")
 
+    def test_rejects_casefolded_directory_prefix_aliases_in_both_orders(self):
+        entry_orders = (
+            (("Game/Mods/", b""), ("game/mods/example.jar", b"payload")),
+            (("game/mods/example.jar", b"payload"), ("Game/Mods/", b"")),
+        )
+        for entries in entry_orders:
+            with self.subTest(entries=entries), tempfile.TemporaryDirectory() as temp:
+                root = pathlib.Path(temp)
+                archive = root / "directory-prefix-alias.zip"
+                with zipfile.ZipFile(archive, "w") as zf:
+                    for name, payload in entries:
+                        zf.writestr(name, payload)
+                with self.assertRaisesRegex(
+                    ValueError, "Case-insensitive ZIP directory prefix collision"
+                ):
+                    validate_zip(archive)
+                with self.assertRaisesRegex(
+                    SystemExit, "Case-insensitive ZIP directory prefix collision"
+                ):
+                    extract_safe(archive, root / "out")
+                self.assertFalse((root / "out").exists())
+
+    def test_rejects_unicode_normalized_directory_prefix_aliases(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = pathlib.Path(temp)
+            archive = root / "unicode-directory-prefix-alias.zip"
+            with zipfile.ZipFile(archive, "w") as zf:
+                zf.writestr("game/Caf\u00e9/", b"")
+                zf.writestr("game/cafe\u0301/child.txt", b"payload")
+            with self.assertRaisesRegex(
+                ValueError, "Case-insensitive ZIP directory prefix collision"
+            ):
+                validate_zip(archive)
+            with self.assertRaisesRegex(
+                SystemExit, "Case-insensitive ZIP directory prefix collision"
+            ):
+                extract_safe(archive, root / "out")
+            self.assertFalse((root / "out").exists())
+
     def test_rejects_windows_alternate_stream_device_and_alias_paths(self):
         for unsafe_name in (
             "game/mods/payload:stream",

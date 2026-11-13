@@ -292,6 +292,7 @@ def validate_zip(path):
         seen_casefold = set()
         files = set()
         files_casefold = set()
+        prefix_spellings = {}
         for item in entries:
             raw_name = item.filename.replace(chr(92), "/")
             parts = pathlib.PurePosixPath(raw_name).parts
@@ -319,6 +320,18 @@ def validate_zip(path):
                     f"ZIP file/directory path collision: {item.filename} is below file {conflicting_parent}"
                 )
             is_directory = item.is_dir() or raw_name.endswith("/")
+            # Directory prefixes must keep one exact spelling across the archive. Otherwise
+            # Windows may merge paths that Linux/macOS extract into separate directories.
+            prefix_count = len(parts) if is_directory else len(parts) - 1
+            for index in range(1, prefix_count + 1):
+                prefix = "/".join(parts[:index])
+                folded_prefix = _collision_key(prefix)
+                previous_prefix = prefix_spellings.get(folded_prefix)
+                if previous_prefix is not None and previous_prefix != prefix:
+                    raise ValueError(
+                        f"Case-insensitive ZIP directory prefix collision: {item.filename}"
+                    )
+                prefix_spellings[folded_prefix] = prefix
             if not is_directory and any(
                 existing.startswith(folded + "/") for existing in seen_casefold
             ):
