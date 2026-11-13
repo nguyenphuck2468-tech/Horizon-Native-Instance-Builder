@@ -74,7 +74,7 @@ def extract_safe(archive: pathlib.Path, destination: pathlib.Path) -> pathlib.Pa
     # can silently redirect the caller-selected destination.
     if _is_link_or_reparse_point(destination):
         raise SystemExit(
-            f"Existing symlink or reparse-point extraction destination refused: {destination}"
+            f"Symlink extraction destination refused (including Windows reparse points): {destination}"
         )
     # Resolve without creating the destination. An invalid archive must not leave
     # even an empty output directory behind.
