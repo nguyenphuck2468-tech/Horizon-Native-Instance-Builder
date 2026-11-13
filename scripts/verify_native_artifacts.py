@@ -82,7 +82,7 @@ def _inspect_binary(path: Path, target: str) -> tuple[int, str]:
                 raise ValueError(f"{target}: invalid or truncated PE header offset")
             stream.seek(pe_offset)
             pe_header = stream.read(6)
-            if len(pe_header) != 6 or pe_header[:4] != b"PE\\x00\\x00":
+            if len(pe_header) != 6 or pe_header[:4] != b"PE\x00\x00":
                 raise ValueError(f"{target}: invalid PE signature")
             machine = struct.unpack_from("<H", pe_header, 4)[0]
             if machine != 0x8664:
