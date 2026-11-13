@@ -69,6 +69,62 @@ class NativeArtifactVerificationTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "not an ELF executable"):
                 verify_artifacts(inputs, linux, windows)
 
+    def test_rejects_native_binary_changed_while_hashing(self):
+        with tempfile.TemporaryDirectory() as temp:
+            inputs, linux, windows = self._fixture(Path(temp))
+            binary = linux / "native-runtime" / "horizon-client"
+            original_open = Path.open
+            mutated = False
+
+            class MutatingStream:
+                def __init__(self, stream):
+                    self.stream = stream
+
+                def __enter__(self):
+                    self.stream.__enter__()
+                    return self
+
+                def __exit__(self, *args):
+                    return self.stream.__exit__(*args)
+
+                def fileno(self):
+                    return self.stream.fileno()
+
+                def seek(self, *args):
+                    return self.stream.seek(*args)
+
+                def read(self, size=-1):
+                    nonlocal mutated
+                    data = self.stream.read(size)
+                    if not mutated:
+                        with original_open(binary, "ab") as changed:
+                            changed.write(b"changed")
+                        mutated = True
+                    return data
+
+            def patched_open(path, mode="r", *args, **kwargs):
+                stream = original_open(path, mode, *args, **kwargs)
+                if path == binary and mode == "rb":
+                    return MutatingStream(stream)
+                return stream
+
+            with patch.object(Path, "open", patched_open):
+                with self.assertRaisesRegex(ValueError, "changed during verification"):
+                    verify_artifacts(inputs, linux, windows)
+
+    def test_rejects_symlinked_native_binary(self):
+        with tempfile.TemporaryDirectory() as temp:
+            inputs, linux, windows = self._fixture(Path(temp))
+            binary = linux / "native-runtime" / "horizon-client"
+            target = binary.with_name("real-client")
+            binary.rename(target)
+            try:
+                binary.symlink_to(target)
+            except (OSError, NotImplementedError) as error:
+                self.skipTest(f"symlink creation unavailable: {error}")
+            with self.assertRaisesRegex(ValueError, "symlink or reparse-point"):
+                verify_artifacts(inputs, linux, windows)
+
     def test_rejects_platform_built_from_different_horizon_commit(self):
         with tempfile.TemporaryDirectory() as temp:
             inputs, linux, windows = self._fixture(Path(temp))

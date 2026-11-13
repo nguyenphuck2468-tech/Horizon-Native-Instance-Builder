@@ -3,7 +3,9 @@
 import argparse
 import hashlib
 import json
+import os
 import re
+import stat
 import struct
 from pathlib import Path
 
@@ -25,18 +27,43 @@ def _report(path: Path) -> dict[str, str]:
     return fields
 
 
-def _sha256(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as stream:
-        for chunk in iter(lambda: stream.read(1024 * 1024), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
+def _file_identity(metadata: os.stat_result) -> tuple[int, int, int, int, int, int]:
+    return (
+        metadata.st_dev,
+        metadata.st_ino,
+        metadata.st_mode,
+        metadata.st_size,
+        metadata.st_mtime_ns,
+        metadata.st_ctime_ns,
+    )
 
 
-def _verify_binary_format(path: Path, target: str) -> None:
-    """Check the executable header and machine architecture without loading the binary."""
-    size = path.stat().st_size
+def _is_reparse_point(metadata: os.stat_result) -> bool:
+    reparse_attribute = getattr(stat, "FILE_ATTRIBUTE_REPARSE_POINT", 0x400)
+    return stat.S_ISLNK(metadata.st_mode) or bool(
+        getattr(metadata, "st_file_attributes", 0) & reparse_attribute
+    )
+
+
+def _inspect_binary(path: Path, target: str) -> tuple[int, str]:
+    """Validate the executable header and hash the same stable, regular file handle."""
+    try:
+        path_before = path.lstat()
+    except OSError as error:
+        raise ValueError(f"{target}: cannot inspect native client: {error}") from error
+    if _is_reparse_point(path_before):
+        raise ValueError(f"{target}: refusing symlink or reparse-point native client")
+
     with path.open("rb") as stream:
+        before = os.fstat(stream.fileno())
+        if not stat.S_ISREG(before.st_mode) or _is_reparse_point(before):
+            raise ValueError(f"{target}: native client is not a regular file")
+        if _file_identity(path_before) != _file_identity(before):
+            raise ValueError(f"{target}: native client changed before verification")
+        size = before.st_size
+        if size <= 0:
+            raise ValueError(f"{target}: native client binary is empty")
+
         if target == "linux-x86_64":
             header = stream.read(20)
             if len(header) < 20 or header[:4] != b"\x7fELF":
@@ -46,9 +73,7 @@ def _verify_binary_format(path: Path, target: str) -> None:
             machine = struct.unpack_from("<H", header, 18)[0]
             if machine != 62:
                 raise ValueError(f"{target}: expected ELF x86_64 machine (62), got {machine}")
-            return
-
-        if target == "windows-x86_64":
+        elif target == "windows-x86_64":
             dos_header = stream.read(64)
             if len(dos_header) < 64 or dos_header[:2] != b"MZ":
                 raise ValueError(f"{target}: native client is not a PE executable")
@@ -57,16 +82,37 @@ def _verify_binary_format(path: Path, target: str) -> None:
                 raise ValueError(f"{target}: invalid or truncated PE header offset")
             stream.seek(pe_offset)
             pe_header = stream.read(6)
-            if len(pe_header) != 6 or pe_header[:4] != b"PE\x00\x00":
+            if len(pe_header) != 6 or pe_header[:4] != b"PE\\x00\\x00":
                 raise ValueError(f"{target}: invalid PE signature")
             machine = struct.unpack_from("<H", pe_header, 4)[0]
             if machine != 0x8664:
                 raise ValueError(
                     f"{target}: expected PE AMD64 machine (0x8664), got 0x{machine:04x}"
                 )
-            return
+        else:
+            raise ValueError(f"unsupported native artifact target: {target}")
 
-    raise ValueError(f"unsupported native artifact target: {target}")
+        stream.seek(0)
+        digest = hashlib.sha256()
+        bytes_read = 0
+        for chunk in iter(lambda: stream.read(1024 * 1024), b""):
+            bytes_read += len(chunk)
+            digest.update(chunk)
+
+        after = os.fstat(stream.fileno())
+        try:
+            path_after = path.lstat()
+        except OSError as error:
+            raise ValueError(f"{target}: native client path changed during verification") from error
+        if (
+            _file_identity(before) != _file_identity(after)
+            or _file_identity(after) != _file_identity(path_after)
+            or _is_reparse_point(path_after)
+            or bytes_read != size
+        ):
+            raise ValueError(f"{target}: native client changed during verification")
+
+    return size, digest.hexdigest()
 
 
 def verify_artifacts(inputs: Path, linux: Path, windows: Path) -> dict:
@@ -95,14 +141,11 @@ def verify_artifacts(inputs: Path, linux: Path, windows: Path) -> dict:
         binary = root / "native-runtime" / client_name
         if not binary.is_file():
             raise ValueError(f"{target}: missing native client binary: {binary}")
-        size = binary.stat().st_size
-        if size <= 0:
-            raise ValueError(f"{target}: native client binary is empty: {binary}")
-        _verify_binary_format(binary, target)
+        size, digest = _inspect_binary(binary, target)
         verified[target] = {
             "client": client_name,
             "bytes": size,
-            "sha256": _sha256(binary),
+            "sha256": digest,
             "horizon_commit": actual_commit,
         }
 
