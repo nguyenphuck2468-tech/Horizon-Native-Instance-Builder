@@ -632,6 +632,24 @@ class InstanceArchiveTests(unittest.TestCase):
             self.assertTrue(stale_metadata.is_file())
             self.assertFalse((destination / "notes/readme.txt").exists())
 
+    def test_extractor_rejects_casefold_alias_in_existing_destination(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = pathlib.Path(temp)
+            destination = root / "out"
+            existing_game = destination / "Game"
+            existing_game.mkdir(parents=True)
+            sentinel = existing_game / "keep.txt"
+            sentinel.write_text("preserve", encoding="utf-8")
+            archive = root / "case-collision.zip"
+            with zipfile.ZipFile(archive, "w") as zf:
+                zf.writestr("game/versions/26.3/26.3.json", "{}")
+
+            with self.assertRaisesRegex(SystemExit, "Case-insensitive destination path collision"):
+                extract_safe(archive, destination)
+
+            self.assertEqual(sentinel.read_text(encoding="utf-8"), "preserve")
+            self.assertEqual([child.name for child in destination.iterdir()], ["Game"])
+
 
     def test_rejects_unicode_canonical_file_parent_collisions(self):
         with tempfile.TemporaryDirectory() as temp:

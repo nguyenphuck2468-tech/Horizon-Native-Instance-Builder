@@ -93,6 +93,53 @@ def find_minecraft_root(root: pathlib.Path, archive_files=None) -> pathlib.Path:
             raise SystemExit("The ZIP contains multiple equally plausible Minecraft roots; export one instance per ZIP.")
     return ranked[0]
 
+def _validate_existing_destination_collisions(root, validated_entries):
+    """Reject case-fold aliases and file/directory mismatches with existing paths."""
+    expected_children = {}
+    expected_types = {}
+    for _, path, is_directory in validated_entries:
+        for index, part in enumerate(path.parts):
+            parent_key = tuple(_collision_key(value) for value in path.parts[:index])
+            child_key = _collision_key(part)
+            expected_children.setdefault(parent_key, {})[child_key] = part
+            expected_types[(parent_key, child_key)] = (
+                "directory" if index < len(path.parts) - 1 or is_directory else "file"
+            )
+
+    pending = [(root, ())]
+    while pending:
+        directory, parent_key = pending.pop()
+        try:
+            existing_children = list(directory.iterdir())
+        except OSError as error:
+            raise SystemExit(f"Could not inspect existing extraction directory {directory}: {error}") from error
+        for existing in existing_children:
+            child_key = _collision_key(existing.name)
+            expected_name = expected_children.get(parent_key, {}).get(child_key)
+            if expected_name is None:
+                continue
+            if existing.name != expected_name:
+                raise SystemExit(
+                    "Case-insensitive destination path collision: "
+                    f"archive uses {expected_name!r}, destination already contains {existing.name!r}"
+                )
+            if _is_link_or_reparse_point(existing):
+                raise SystemExit(
+                    f"Existing symlink or reparse point in extraction path refused: {existing}"
+                )
+            expected_type = expected_types[(parent_key, child_key)]
+            if expected_type == "directory":
+                if not existing.is_dir():
+                    raise SystemExit(
+                        f"Destination file/directory path collision: expected directory at {existing}"
+                    )
+                pending.append((existing, parent_key + (child_key,)))
+            elif existing.is_dir():
+                raise SystemExit(
+                    f"Destination file/directory path collision: expected file at {existing}"
+                )
+
+
 def extract_safe(archive: pathlib.Path, destination: pathlib.Path) -> pathlib.Path:
     # Path.is_symlink() misses Windows junctions. Reject reparse points before resolve()
     # can silently redirect the caller-selected destination.
@@ -219,6 +266,7 @@ def extract_safe(archive: pathlib.Path, destination: pathlib.Path) -> pathlib.Pa
             created_directories.extend(reversed(missing))
 
         try:
+            _validate_existing_destination_collisions(root, validated_entries)
             for info, path, is_directory in validated_entries:
                 target = root.joinpath(*path.parts)
                 current = root
