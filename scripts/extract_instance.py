@@ -110,6 +110,15 @@ def extract_safe(archive: pathlib.Path, destination: pathlib.Path) -> pathlib.Pa
             folded = _collision_key(normalized)
             if folded in seen_casefold:
                 raise SystemExit(f"Case-insensitive ZIP path collision: {info.filename}")
+            parents = ["/".join(path.parts[:index]) for index in range(1, len(path.parts))]
+            conflicting_parent = next(
+                (_collision_key(parent) for parent in parents if _collision_key(parent) in files_casefold),
+                None,
+            )
+            if conflicting_parent is not None:
+                raise SystemExit(
+                    f"ZIP file/directory path collision: {info.filename} is below file {conflicting_parent}"
+                )
             # Keep every directory prefix's spelling stable so Windows and POSIX do not
             # materialize different directory trees from the same archive.
             prefix_count = len(path.parts) if is_directory else len(path.parts) - 1
@@ -122,15 +131,6 @@ def extract_safe(archive: pathlib.Path, destination: pathlib.Path) -> pathlib.Pa
                         f"Case-insensitive ZIP directory prefix collision: {info.filename}"
                     )
                 prefix_spellings[folded_prefix] = prefix
-            parents = ["/".join(path.parts[:index]) for index in range(1, len(path.parts))]
-            conflicting_parent = next(
-                (_collision_key(parent) for parent in parents if _collision_key(parent) in files_casefold),
-                None,
-            )
-            if conflicting_parent is not None:
-                raise SystemExit(
-                    f"ZIP file/directory path collision: {info.filename} is below file {conflicting_parent}"
-                )
             if not is_directory and any(
                 existing.startswith(folded + "/") for existing in seen_casefold
             ):
