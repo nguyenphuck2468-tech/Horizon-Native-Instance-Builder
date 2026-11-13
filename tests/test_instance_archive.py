@@ -717,5 +717,46 @@ class InstanceArchiveTests(unittest.TestCase):
             self.assertFalse((root / "game").exists())
 
 
+    def test_extractor_enforces_actual_total_uncompressed_limit(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = pathlib.Path(temp)
+            archive = root / "lying-total-size.zip"
+            destination = root / "out"
+            with zipfile.ZipFile(archive, "w") as zf:
+                zf.writestr("game/first.bin", b"aa")
+                zf.writestr("game/second.bin", b"bb")
+
+            import io
+
+            original_infolist = zipfile.ZipFile.infolist
+            original_open = zipfile.ZipFile.open
+
+            def declared_small_infolist(instance):
+                entries = original_infolist(instance)
+                for entry in entries:
+                    if not entry.is_dir():
+                        entry.file_size = 2
+                return entries
+
+            def expanded_open(instance, name, *args, **kwargs):
+                filename = getattr(name, "filename", name)
+                if filename == "game/first.bin":
+                    return io.BytesIO(b"111")
+                if filename == "game/second.bin":
+                    return io.BytesIO(b"222")
+                return original_open(instance, name, *args, **kwargs)
+
+            with (
+                patch("scripts.extract_instance.MAX_MEMBER_UNCOMPRESSED_BYTES", 10),
+                patch("scripts.extract_instance.MAX_TOTAL_UNCOMPRESSED_BYTES", 5),
+                patch.object(zipfile.ZipFile, "infolist", declared_small_infolist),
+                patch.object(zipfile.ZipFile, "open", expanded_open),
+            ):
+                with self.assertRaisesRegex(SystemExit, "Actual ZIP archive exceeds the total"):
+                    extract_safe(archive, destination)
+
+            self.assertFalse(destination.exists())
+
+
 if __name__ == "__main__":
     unittest.main()
