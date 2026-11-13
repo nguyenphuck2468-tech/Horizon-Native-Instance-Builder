@@ -615,6 +615,23 @@ class InstanceArchiveTests(unittest.TestCase):
             self.assertEqual((game / "versions/26.3/26.3.json").read_text(), "{}")
             self.assertEqual(archive.read_bytes(), before)
 
+    def test_extractor_does_not_use_preexisting_minecraft_root_for_new_archive(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = pathlib.Path(temp)
+            destination = root / "out"
+            stale_metadata = destination / "stale/versions/1.20/1.20.json"
+            stale_metadata.parent.mkdir(parents=True)
+            stale_metadata.write_text("{}", encoding="utf-8")
+            archive = root / "notes.zip"
+            with zipfile.ZipFile(archive, "w") as zf:
+                zf.writestr("notes/readme.txt", "not a game")
+
+            with self.assertRaisesRegex(SystemExit, "does not contain a Minecraft versions"):
+                extract_safe(archive, destination)
+
+            self.assertTrue(stale_metadata.is_file())
+            self.assertFalse((destination / "notes/readme.txt").exists())
+
 
     def test_rejects_unicode_canonical_file_parent_collisions(self):
         with tempfile.TemporaryDirectory() as temp:

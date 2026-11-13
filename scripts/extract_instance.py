@@ -51,7 +51,31 @@ def _collision_key(value):
     return unicodedata.normalize("NFC", normalized.casefold())
 
 
-def find_minecraft_root(root: pathlib.Path) -> pathlib.Path:
+def find_minecraft_root(root: pathlib.Path, archive_files=None) -> pathlib.Path:
+    # When extracting into an existing destination, never let an older Minecraft tree
+    # satisfy validation for a new archive that contains no version metadata.
+    if archive_files is not None:
+        version_counts = {}
+        for name in archive_files:
+            parts = pathlib.PurePosixPath(name).parts
+            if (
+                len(parts) >= 3
+                and parts[-3] == "versions"
+                and parts[-1] == parts[-2] + ".json"
+            ):
+                relative_root = pathlib.PurePosixPath(*parts[:-3])
+                version_counts[relative_root] = version_counts.get(relative_root, 0) + 1
+        if not version_counts:
+            raise SystemExit(
+                "The instance ZIP does not contain a Minecraft versions/<id>/<id>.json tree. "
+                "Export a complete game directory (with its versions folder), not only a modpack manifest."
+            )
+        ranked = sorted(version_counts.items(), key=lambda item: (item[1], str(item[0])), reverse=True)
+        if len(ranked) > 1 and ranked[0][1] == ranked[1][1]:
+            raise SystemExit("The ZIP contains multiple equally plausible Minecraft roots; export one instance per ZIP.")
+        relative_root = ranked[0][0]
+        return root if str(relative_root) == "." else root.joinpath(*relative_root.parts)
+
     candidates = set()
     for metadata in root.rglob("*.json"):
         if metadata.parent.parent.name == "versions" and metadata.stem == metadata.parent.name:
@@ -216,7 +240,8 @@ def extract_safe(archive: pathlib.Path, destination: pathlib.Path) -> pathlib.Pa
                         while chunk := source.read(1024 * 1024):
                             output.write(chunk)
 
-            return find_minecraft_root(root)
+            archive_files = [path.as_posix() for _, path, is_directory in validated_entries if not is_directory]
+            return find_minecraft_root(root, archive_files)
         except BaseException:
             # Extraction is exclusive: only remove files and directories created by this
             # invocation, never pre-existing destination content.
