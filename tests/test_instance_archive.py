@@ -577,7 +577,7 @@ class InstanceArchiveTests(unittest.TestCase):
             if created.returncode != 0:
                 self.skipTest(f"could not create a Windows directory junction: {created.stderr}")
             try:
-                with self.assertRaisesRegex(SystemExit, "reparse-point extraction destination"):
+                with self.assertRaisesRegex(SystemExit, "symlink extraction destination refused"):
                     extract_safe(archive, destination_junction)
                 self.assertFalse((outside / "game").exists())
             finally:
@@ -611,7 +611,7 @@ class InstanceArchiveTests(unittest.TestCase):
                 zf.writestr("game/assets/indexes/26.json", "{}")
             before = archive.read_bytes()
             game = extract_safe(archive, root / "unpacked")
-            self.assertEqual(game, root / "unpacked/game")
+            self.assertEqual(game, (root / "unpacked/game").resolve())
             self.assertEqual((game / "versions/26.3/26.3.json").read_text(), "{}")
             self.assertEqual(archive.read_bytes(), before)
 
