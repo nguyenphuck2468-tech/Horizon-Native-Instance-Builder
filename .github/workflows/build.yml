@@ -18,8 +18,8 @@ on:
         default: "instance.zip"
         type: string
       minecraft_release_tag:
-        description: "Release tag containing a full Minecraft game-directory ZIP"
-        required: false
+        description: "Required release tag in THIS repository containing a full Minecraft game-directory ZIP (not a Horizon backup)"
+        required: true
         type: string
       minecraft_asset_name:
         description: "Minecraft game ZIP asset filename"
