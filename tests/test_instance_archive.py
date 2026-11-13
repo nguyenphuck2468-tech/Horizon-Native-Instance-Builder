@@ -691,14 +691,25 @@ class InstanceArchiveTests(unittest.TestCase):
             with zipfile.ZipFile(archive, "w") as zf:
                 zf.writestr("game/payload.bin", b"payload larger than one byte")
 
+            import io
+
             original_infolist = zipfile.ZipFile.infolist
+            original_open = zipfile.ZipFile.open
 
             def undersized_infolist(instance):
                 entries = original_infolist(instance)
                 entries[0].file_size = 1
                 return entries
 
-            with patch.object(zipfile.ZipFile, "infolist", undersized_infolist):
+            def expanded_open(instance, name, *args, **kwargs):
+                if getattr(name, "filename", name) == "game/payload.bin":
+                    return io.BytesIO(b"payload larger than one byte")
+                return original_open(instance, name, *args, **kwargs)
+
+            with (
+                patch.object(zipfile.ZipFile, "infolist", undersized_infolist),
+                patch.object(zipfile.ZipFile, "open", expanded_open),
+            ):
                 with self.assertRaisesRegex(SystemExit, "expands beyond its declared size"):
                     extract_safe(archive, destination)
 
