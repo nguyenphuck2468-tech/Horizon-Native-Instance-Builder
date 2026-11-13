@@ -686,3 +686,25 @@ class InstanceArchiveTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+    def test_extractor_rejects_actual_member_size_above_declared_size(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = pathlib.Path(temp)
+            archive = root / "lying-size.zip"
+            destination = root / "out"
+            with zipfile.ZipFile(archive, "w") as zf:
+                zf.writestr("game/payload.bin", b"payload larger than one byte")
+
+            original_infolist = zipfile.ZipFile.infolist
+
+            def undersized_infolist(instance):
+                entries = original_infolist(instance)
+                entries[0].file_size = 1
+                return entries
+
+            with patch.object(zipfile.ZipFile, "infolist", undersized_infolist):
+                with self.assertRaisesRegex(SystemExit, "expands beyond its declared size"):
+                    extract_safe(archive, destination)
+
+            self.assertFalse(destination.exists())
+            self.assertFalse((root / "game").exists())
