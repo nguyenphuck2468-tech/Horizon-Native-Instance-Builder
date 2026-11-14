@@ -147,7 +147,7 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y build-essential pkg-config libssl-dev cmake libfontconfig1-dev libxkbcommon-dev libxkbcommon-x11-dev libwayland-dev libx11-dev libvulkan-dev libasound2-dev
+          sudo apt-get install -y build-essential pkg-config libssl-dev cmake libfontconfig1-dev libxkbcommon-dev libxkbcommon-x11-dev libudev-dev libwayland-dev libx11-dev libvulkan-dev libasound2-dev
       - name: Checkout the exact Horizon revision resolved by validation
         shell: bash
         run: |
@@ -238,8 +238,10 @@ jobs:
         shell: bash
         run: cargo build --locked --release -p horizon-client --bin horizon-client
       - name: Build optional native-mod variant
+        id: native_mods
         shell: bash
         run: |
+          echo "result=not-requested" >> "$GITHUB_OUTPUT"
           if ! find input/mods-unpacked -mindepth 1 -maxdepth 1 -type d -print -quit | grep -q .; then
             echo "No native mod bundles supplied; the core client is the primary build."
             exit 0
@@ -250,16 +252,23 @@ jobs:
             CLI="horizon-src/launcher/target/release/horizon-launcher"
           fi
           set -o pipefail
-          "$CLI" native-build input/mods-unpacked --trust-native-code --allow-version-mismatch --profile performance 2>&1 | tee native-build.log
+          if "$CLI" native-build input/mods-unpacked --trust-native-code --allow-version-mismatch --profile performance 2>&1 | tee native-build.log; then
+            echo "result=built" >> "$GITHUB_OUTPUT"
+          else
+            status=$?
+            echo "result=failed" >> "$GITHUB_OUTPUT"
+            echo "::warning::Optional native-mod build failed (exit $status). The verified unmodified Horizon core will be retained as the primary client."
+          fi
       - name: Collect the actual native client and build facts
         if: always()
         shell: bash
         env:
           CLIENT: ${{ matrix.client }}
           TARGET: ${{ matrix.target }}
+          NATIVE_MOD_RESULT: ${{ steps.native_mods.outputs.result }}
         run: |
           mkdir -p "native-runtime" "build-report/$TARGET"
-          printf 'Horizon commit: %s\\nMinecraft version: %s\\nTarget: %s\\nRunner: %s\\n' "$HORIZON_COMMIT" "$MINECRAFT_VERSION" "$TARGET" "$RUNNER_OS" > "build-report/$TARGET/build.txt"
+          printf 'Horizon commit: %s\\nMinecraft version: %s\\nTarget: %s\\nRunner: %s\\nOptional native mods: %s\\n' "$HORIZON_COMMIT" "$MINECRAFT_VERSION" "$TARGET" "$RUNNER_OS" "${NATIVE_MOD_RESULT:-unknown}" > "build-report/$TARGET/build.txt"
           if [[ -f native-build.log ]]; then
             cp native-build.log "build-report/$TARGET/"
           fi
