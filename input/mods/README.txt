@@ -1,1 +1,1 @@
-Place one or more trusted .hnmod archives here.
+Optional: place trusted .hnmod archives here. With no bundles, Builder still compiles the unmodified Horizon core client. Native mod bundles execute native code during build; only use sources you trust.\n
