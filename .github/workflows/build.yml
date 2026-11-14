@@ -91,7 +91,7 @@ jobs:
           git -C horizon-revision fetch --depth=1 origin "$HORIZON_REV"
           HORIZON_COMMIT="$(git -C horizon-revision rev-parse 'FETCH_HEAD^{commit}')"
           mkdir -p build-report
-          printf '%s\\n' "$HORIZON_COMMIT" > build-report/horizon-commit.txt
+          printf '%s\n' "$HORIZON_COMMIT" > build-report/horizon-commit.txt
           echo "Resolved Horizon revision: $HORIZON_COMMIT"
       - uses: actions/upload-artifact@v4
         with:
@@ -292,10 +292,10 @@ jobs:
           path: verified/inputs
       - name: Verify both native artifacts use the same Horizon revision
         run: |
-          python scripts/verify_native_artifacts.py \\
-            --inputs verified/inputs \\
-            --linux verified/native-build-linux-x86_64 \\
-            --windows verified/native-build-windows-x86_64 \\
+          python scripts/verify_native_artifacts.py \
+            --inputs verified/inputs \
+            --linux verified/native-build-linux-x86_64 \
+            --windows verified/native-build-windows-x86_64 \
             --output build-report/native-build-verification.json
       - uses: actions/upload-artifact@v4
         with:
