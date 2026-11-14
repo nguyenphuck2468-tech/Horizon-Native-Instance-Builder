@@ -1,6 +1,13 @@
 name: Build Horizon Native Instance
 
 on:
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/build.yml"
+      - "scripts/**"
+      - "input/mods/**"
   workflow_dispatch:
     inputs:
       horizon_revision:
@@ -86,7 +93,7 @@ jobs:
         run: python scripts/extract_native_mods.py input/mods --destination build-report/validated-native-mods
       - name: Resolve the Horizon revision once for every platform
         env:
-          HORIZON_REV: ${{ inputs.horizon_revision }}
+          HORIZON_REV: ${{ inputs.horizon_revision || 'main' }}
         shell: bash
         run: |
           git clone --filter=blob:none --no-checkout https://github.com/nguyenphuck2468-tech/horizon.git horizon-revision
@@ -100,13 +107,14 @@ jobs:
           name: validated-inputs
           path: |
             input/instance/instance.zip
-            input/mods/*.hnmod
+            input/mods/
             build-report/input-manifest.json
             build-report/horizon-commit.txt
           if-no-files-found: error
           retention-days: 7
 
   native-build:
+    if: ${{ github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[build-native]') }}
     needs: validate
     strategy:
       fail-fast: false
@@ -168,7 +176,7 @@ jobs:
       - name: Download Minecraft directly from Mojang
         if: ${{ inputs.minecraft_release_tag == '' }}
         env:
-          VERSION: ${{ inputs.minecraft_version }}
+          VERSION: ${{ inputs.minecraft_version || '26.3' }}
           EXPECTED_VERSION: ${{ env.EXPECTED_MINECRAFT_VERSION }}
         shell: bash
         run: |
@@ -298,6 +306,7 @@ jobs:
           retention-days: 14
 
   verify-native-artifacts:
+    if: ${{ github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[build-native]') }}
     needs: [validate, native-build]
     runs-on: ubuntu-latest
     steps:
@@ -333,6 +342,7 @@ jobs:
           retention-days: 30
 
   preserve-instance:
+    if: ${{ github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[build-native]') }}
     needs: validate
     runs-on: ubuntu-latest
     steps:
