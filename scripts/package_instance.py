@@ -78,7 +78,7 @@ def package(instance: pathlib.Path, binary: pathlib.Path, mods: pathlib.Path,
             "path": f"native-build/{target}/{binary.name}",
             "sha256": sha256(binary),
             "bytes": binary.stat().st_size,
-            "version": f"native-{horizon_commit[:7]}",
+            "imported_version_prefix": "imported-",
         },
         "mods": [{"file": p.name, "sha256": sha256(p), "bytes": p.stat().st_size}
                  for p in mod_files],
@@ -95,15 +95,16 @@ INSTALL
    program folder. The result must be GAME_HOME/instances/{instance_id}/...
 2. Import the included native client using the Horizon Launcher CLI:
    horizon-launcher import-build "native-build/{target}/{binary.name}" --trust-unsigned
-3. Pin and select this instance:
-   horizon-launcher instance version "{instance_id}" "native-{horizon_commit[:7]}"
+3. Import and pin the exact imported build to this instance (PowerShell):
+   $build = horizon-launcher --json import-build "native-build/{target}/{binary.name}" --trust-unsigned | ConvertFrom-Json
+   horizon-launcher instance version "{instance_id}" $build.imported
    horizon-launcher instance select "{instance_id}"
 4. Open Horizon Launcher. The instance should appear in the instance list.
 
 The instance's game files are now a real Horizon instances/<id> directory; no ZIP restore/import
 is required. The native build is installed in Horizon's separate version store and associated
-with this instance using Horizon's own CLI, because the launcher keeps versions and instance
-metadata outside the instances directory.
+with this instance using Horizon's own CLI. The CLI returns the real imported version tag
+(imported-<date>-<binary-hash>); it must not be guessed from the Horizon source commit.
 
 The original instance ZIP is unpacked without changing file contents. Its archive checksum,
 the native executable checksum, and mod input checksums are recorded in build-manifest.json.
