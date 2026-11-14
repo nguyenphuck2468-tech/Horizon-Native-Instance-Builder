@@ -83,6 +83,58 @@ class MojangDownloadTests(unittest.TestCase):
                 self.assertIn("libraries/org/example/sample/1.0/sample-1.0.jar", names)
                 self.assertIn(f"assets/objects/{asset_sha[:2]}/{asset_sha}", names)
 
+    def test_failed_archive_write_preserves_previous_output(self):
+        client = b"official-client-jar"
+        client_sha = hashlib.sha1(client).hexdigest()
+        metadata = {
+            "id": "1.21.1",
+            "downloads": {
+                "client": {
+                    "url": "https://launcher.mojang.com/client.jar",
+                    "size": len(client),
+                    "sha1": client_sha,
+                }
+            },
+        }
+        manifest = {
+            "latest": {"release": "1.21.1", "snapshot": "snapshot"},
+            "versions": [{
+                "id": "1.21.1",
+                "url": "https://piston-meta.mojang.com/version.json",
+                "size": 1,
+                "sha1": "meta-sha",
+            }],
+        }
+        payloads = {
+            download_minecraft.MANIFEST_URL: json.dumps(manifest).encode(),
+            "https://piston-meta.mojang.com/version.json": json.dumps(metadata).encode(),
+        }
+
+        def fake_read(url, *args, **kwargs):
+            return payloads[url]
+
+        def fake_write(root, relative, url, size=None, sha1=None):
+            target = pathlib.Path(root) / relative
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_bytes(client)
+            return target
+
+        with tempfile.TemporaryDirectory() as temp:
+            output = pathlib.Path(temp) / "minecraft.zip"
+            output.write_bytes(b"previous archive")
+            with patch.object(download_minecraft, "_read_url", side_effect=fake_read), patch.object(
+                download_minecraft, "_write_verified", side_effect=fake_write
+            ), patch.object(
+                download_minecraft.zipfile,
+                "ZipFile",
+                side_effect=OSError("simulated archive failure"),
+            ):
+                with self.assertRaisesRegex(OSError, "simulated archive failure"):
+                    download_minecraft.download_game("latest-release", output)
+
+            self.assertEqual(output.read_bytes(), b"previous archive")
+            self.assertEqual(list(pathlib.Path(temp).glob(".minecraft.zip.*.part")), [])
+
     def test_rejects_unknown_version_before_creating_archive(self):
         manifest = {"latest": {"release": "1.0", "snapshot": "1.0"}, "versions": []}
         with tempfile.TemporaryDirectory() as temp:

@@ -4,6 +4,7 @@ import argparse
 import concurrent.futures
 import hashlib
 import json
+import os
 import pathlib
 import re
 import tempfile
@@ -289,11 +290,31 @@ def download_game(version, output_zip):
             for future in concurrent.futures.as_completed(futures):
                 future.result()
 
-        output_zip.unlink(missing_ok=True)
-        with zipfile.ZipFile(output_zip, "w", compression=zipfile.ZIP_STORED, allowZip64=True) as archive:
-            for path in sorted(root.rglob("*")):
-                if path.is_file():
-                    archive.write(path, path.relative_to(root).as_posix())
+        staged_zip = None
+        try:
+            # Build beside the destination, then publish with one same-filesystem replace.
+            # A failed ZIP write must never destroy a previously usable instance archive.
+            with tempfile.NamedTemporaryFile(
+                prefix=f".{output_zip.name}.",
+                suffix=".part",
+                dir=output_zip.parent,
+                delete=False,
+            ) as temporary_zip:
+                staged_zip = pathlib.Path(temporary_zip.name)
+            with zipfile.ZipFile(
+                staged_zip, "w", compression=zipfile.ZIP_STORED, allowZip64=True
+            ) as archive:
+                for path in sorted(root.rglob("*")):
+                    if path.is_file():
+                        archive.write(path, path.relative_to(root).as_posix())
+            with staged_zip.open("rb+") as completed_zip:
+                completed_zip.flush()
+                os.fsync(completed_zip.fileno())
+            os.replace(staged_zip, output_zip)
+            staged_zip = None
+        finally:
+            if staged_zip is not None:
+                staged_zip.unlink(missing_ok=True)
     print(f"Downloaded official Minecraft {version_id} game files to {output_zip}")
     return version_id
 
