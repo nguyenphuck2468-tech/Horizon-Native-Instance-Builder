@@ -47,7 +47,7 @@ The workflow does not sign in to a Microsoft/Minecraft account. Mojang's public 
 Open Actions → Build Horizon Native Instance → Run workflow.
 
 - horizon_revision: Horizon branch, tag or commit.
-- minecraft_version: latest-release by default; set 26.3 or another exact version to pin it.
+- minecraft_version: defaults to 26.3 to match Horizon main; choose another exact version only when it matches the selected Horizon revision's research-lock.json.
 - minecraft_release_tag: leave blank for direct Mojang download. Only set this for the legacy prebuilt-ZIP path.
 - instance_release_tag: optional Release tag for the Horizon instance backup.
 

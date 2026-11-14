@@ -76,12 +76,12 @@ Không đưa game ZIP lên Release công khai. Khi dùng cách Mojang mặc đ�
 | horizon_revision | Nhánh/tag/commit Horizon cần build |
 | instance_release_tag | Để trống nếu ZIP đã nằm trong repo; nếu tải từ Release thì nhập tag |
 | instance_asset_name | Tên ZIP backup, mặc định instance.zip |
-| minecraft_version | latest-release hoặc version cụ thể như 26.3 |
+| minecraft_version | Mặc định 26.3; version phải khớp research-lock.json của revision Horizon đã chọn |
 | minecraft_release_tag | Để trống để tự tải Mojang; chỉ nhập nếu dùng ZIP Minecraft có sẵn |
 | minecraft_source_repository | Chỉ cần cho ZIP từ repo khác |
 | minecraft_asset_name | Tên ZIP có sẵn, mặc định minecraft.zip |
 
-**Khuyến nghị:** để minecraft_release_tag trống và đặt minecraft_version thành version bạn muốn build. Ví dụ nhập 26.3 để pin đúng phiên bản, hoặc giữ latest-release để dùng release ổn định mới nhất.
+**Khuyến nghị:** để minecraft_release_tag trống và giữ minecraft_version là 26.3 khi build Horizon main. Nếu chọn revision Horizon khác, hãy nhập đúng minecraft.version trong research-lock.json của revision đó. Workflow sẽ tự kiểm tra và dừng nếu version trong ZIP không khớp.
 
 ## 4. Các bước build
 
