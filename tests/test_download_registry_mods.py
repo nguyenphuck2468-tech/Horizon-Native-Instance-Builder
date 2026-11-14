@@ -82,7 +82,7 @@ class RegistryModSelectionTests(unittest.TestCase):
             archive.writestr("horizon-native.json", json.dumps({
                 "id": "sample", "version": "1.2.0", "game": "26.3"
             }))
-            archive.writestr("mixins/sample/horizon-mixin.toml", "[mod]\nid = \\"sample\\"\\n")
+            archive.writestr("mixins/sample/horizon-mixin.toml", '[mod]\nid = "sample"\n')
         data = payload.getvalue()
         expected = {
             "id": "sample",
