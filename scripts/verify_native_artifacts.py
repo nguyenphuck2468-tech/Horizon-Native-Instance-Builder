@@ -135,6 +135,15 @@ def verify_artifacts(inputs: Path, linux: Path, windows: Path) -> dict:
         fields = _report(report_path)
         if fields.get("Target") != target:
             raise ValueError(f"{target}: build report target mismatch")
+        mod_inputs = list((inputs / "input" / "mods").glob("*.hnmod"))
+        if mod_inputs and (
+            fields.get("Optional native mods") != "built"
+            or fields.get("Build mode") != "core+native-mods"
+        ):
+            raise ValueError(
+                f"{target}: {len(mod_inputs)} .hnmod input(s) were supplied, "
+                "but the artifact is not confirmed as a native-mod build"
+            )
         actual_commit = fields.get("Horizon commit", "").lower()
         if actual_commit != pinned_commit:
             raise ValueError(
