@@ -265,20 +265,27 @@ def download_game(version, output_zip):
                 if relative and url:
                     safe = _safe_relative_path(relative).as_posix()
                     previous = unique_downloads.get(safe)
-                    if previous and (
-                        previous.get("url") != url
-                        or previous.get("sha1") != artifact.get("sha1")
-                    ):
+                    if previous and previous.get("sha1") != artifact.get("sha1"):
                         raise ValueError(f"Conflicting Mojang library metadata for {safe}")
-                    unique_downloads[safe] = artifact
+                    if previous is None:
+                        unique_downloads[safe] = artifact
         for relative, artifact in unique_downloads.items():
             _write_verified(root, f"libraries/{relative}", artifact["url"], artifact.get("size"), artifact.get("sha1"))
 
         all_assets = {}
         for objects in asset_indexes.values():
-            all_assets.update(objects)
+            for logical_name, record in objects.items():
+                asset_hash = record.get("hash") if isinstance(record, dict) else None
+                if asset_hash:
+                    previous = all_assets.get(asset_hash.lower())
+                    if previous and previous[1].get("size") != record.get("size"):
+                        raise ValueError(f"Conflicting Mojang asset metadata for {logical_name}")
+                    all_assets[asset_hash.lower()] = (logical_name, record)
         with concurrent.futures.ThreadPoolExecutor(max_workers=8) as executor:
-            futures = [executor.submit(_download_asset, root, name, record) for name, record in all_assets.items()]
+            futures = [
+                executor.submit(_download_asset, root, name, record)
+                for name, record in all_assets.values()
+            ]
             for future in concurrent.futures.as_completed(futures):
                 future.result()
 
