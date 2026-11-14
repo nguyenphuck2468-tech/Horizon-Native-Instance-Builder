@@ -82,6 +82,8 @@ jobs:
         run: python -m unittest discover -s tests -v
       - name: Validate Horizon instance and optional native mods
         run: python scripts/prepare.py
+      - name: Verify real .hnmod bundle extraction layout
+        run: python scripts/extract_native_mods.py input/mods --destination build-report/validated-native-mods
       - name: Resolve the Horizon revision once for every platform
         env:
           HORIZON_REV: ${{ inputs.horizon_revision }}
