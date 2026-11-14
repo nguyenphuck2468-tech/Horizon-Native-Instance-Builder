@@ -9,14 +9,16 @@ Implemented in the workflow:
 - The Minecraft archive is extracted safely and its game directory is passed to Horizon's prepare --minecraft.
 - One or more .hnmod files are validated for horizon-native.json and horizon-mixin.toml.
 - SHA-256 input manifest is generated.
-- The workflow builds the launcher CLI from the selected revision of nguyenphuck2468-tech/horizon.
+- The workflow resolves the selected Horizon ref once before parallel jobs and checks out that same immutable commit on Linux and Windows.
+- A final verification job validates the Linux ELF x86_64 and Windows PE AMD64 executable headers, hashes both stable binaries, and rejects mismatched Horizon commit reports.
 - The workflow installs and prepares a published Horizon base before invoking the client native-build command.
 - The actual platform-specific horizon-client binary is required and uploaded; a launcher-only compile is not counted as success.
 - Manual GitHub Actions workflow, read-only token, no secrets, Linux x86_64 and Windows x86_64 jobs.
 
 Still requires a real Actions run to certify:
 
-- Whether the supplied Minecraft ZIP contains every additional game file pinned by the selected Horizon release.
+- Whether the supplied Minecraft files contain every additional game file pinned by the selected Horizon release.
+- Whether the cross-platform verification job completes successfully against actual native binaries.
 - Whether the selected native-mod bundles build successfully on both hosted platforms.
 - Whether the resulting binaries import and launch correctly on a user's machine with a compatible prepared base release.
 
