@@ -238,8 +238,10 @@ jobs:
           else
             CLI="horizon-src/launcher/target/release/horizon-launcher"
           fi
-          "$CLI" install nightly
-          "$CLI" prepare --minecraft "$MINECRAFT_DIR"
+          HORIZON_TAG="$(python -c 'import json; print(json.load(open("build-report/horizon-nightly.json", encoding="utf-8"))["install_tag"])')"
+          echo "Installing exact Nightly: $HORIZON_TAG"
+          "$CLI" install "$HORIZON_TAG"
+          "$CLI" prepare --version "$HORIZON_TAG" --minecraft "$MINECRAFT_DIR"
       - name: Safely extract selected registry .hnmod bundles
         run: python scripts/extract_native_mods.py input/mods-latest --destination input/mods-latest-unpacked
       - name: Build the Horizon core client
@@ -261,7 +263,8 @@ jobs:
             CLI="horizon-src/launcher/target/release/horizon-launcher"
           fi
           set -o pipefail
-          if "$CLI" native-build input/mods-latest-unpacked --trust-native-code --update --profile performance 2>&1 | tee native-build.log; then
+          HORIZON_TAG="$(python -c 'import json; print(json.load(open("build-report/horizon-nightly.json", encoding="utf-8"))["install_tag"])')"
+          if "$CLI" native-build input/mods-latest-unpacked --version "$HORIZON_TAG" --trust-native-code --profile performance 2>&1 | tee native-build.log; then
             echo "result=built" >> "$GITHUB_OUTPUT"
           else
             status=$?
