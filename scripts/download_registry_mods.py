@@ -34,7 +34,7 @@ SHA256 = re.compile(r"^[0-9a-f]{64}$")
 MAX_FILE_BYTES = 64 * 1024 * 1024
 
 
-def fetch_bytes(url: str) -> bytes:
+def fetch_bytes(url: str, max_bytes: int = MAX_FILE_BYTES) -> bytes:
     request = urllib.request.Request(
         url,
         headers={
@@ -46,12 +46,18 @@ def fetch_bytes(url: str) -> bytes:
         final = urllib.parse.urlparse(response.geturl())
         if final.scheme != "https":
             raise ValueError(f"Refusing non-HTTPS download URL: {response.geturl()}")
-        return response.read()
+        length = response.headers.get("Content-Length")
+        if length and int(length) > max_bytes:
+            raise ValueError(f"Download exceeds the {max_bytes}-byte safety limit: {url}")
+        data = response.read(max_bytes + 1)
+        if len(data) > max_bytes:
+            raise ValueError(f"Download exceeds the {max_bytes}-byte safety limit: {url}")
+        return data
 
 
 def fetch_json(url: str) -> dict:
     try:
-        value = json.loads(fetch_bytes(url))
+        value = json.loads(fetch_bytes(url, max_bytes=MAX_FILE_BYTES))
     except (UnicodeDecodeError, json.JSONDecodeError) as error:
         raise ValueError(f"Invalid JSON from {url}: {error}") from error
     if not isinstance(value, dict):
@@ -132,14 +138,14 @@ def choose_versions(index: dict, health: dict, health_updated_at: str,
             continue
 
         url = file_info.get("url")
-        name = file_info.get("name")
-        size = file_info.get("size")
         parsed = urllib.parse.urlparse(url or "")
+        name = file_info.get("name") or urllib.parse.unquote(pathlib.PurePosixPath(parsed.path).name)
+        size = file_info.get("size")
         if parsed.scheme != "https" or parsed.hostname != "github.com":
             raise ValueError(f"{mod_id}: registry file URL is not an approved HTTPS GitHub URL.")
         if not isinstance(name, str) or not name.endswith(".hnmod") or pathlib.PurePosixPath(name).name != name:
             raise ValueError(f"{mod_id}: invalid .hnmod filename in registry.")
-        if not isinstance(size, int) or size <= 0 or size > MAX_FILE_BYTES:
+        if size is not None and (not isinstance(size, int) or size <= 0 or size > MAX_FILE_BYTES):
             raise ValueError(f"{mod_id}: invalid or oversized registry file.")
         selected.append({
             "id": mod_id,
@@ -155,7 +161,9 @@ def choose_versions(index: dict, health: dict, health_updated_at: str,
 
 
 def validate_bundle(data: bytes, expected: dict) -> None:
-    if len(data) != expected["size"]:
+    if len(data) > MAX_FILE_BYTES:
+        raise ValueError(f"{expected['id']}: archive exceeds the {MAX_FILE_BYTES}-byte safety limit.")
+    if expected.get("size") is not None and len(data) != expected["size"]:
         raise ValueError(
             f"{expected['id']}: file size mismatch; expected {expected['size']}, got {len(data)}."
         )
@@ -204,10 +212,18 @@ def download_registry_mods(output: pathlib.Path, report_path: pathlib.Path,
         staging = pathlib.Path(temp)
         downloaded = []
         for item in selected:
-            data = fetch_bytes(item["url"])
+            data = fetch_bytes(item["url"], max_bytes=MAX_FILE_BYTES)
             validate_bundle(data, item)
             (staging / item["file"]).write_bytes(data)
-            downloaded.append({key: item[key] for key in ("id", "version", "game", "file", "size", "sha256", "url")})
+            downloaded.append({
+                "id": item["id"],
+                "version": item["version"],
+                "game": item["game"],
+                "file": item["file"],
+                "size": len(data),
+                "sha256": item["sha256"],
+                "url": item["url"],
+            })
         if not downloaded:
             raise ValueError("No compatible registry native mods remain; refusing to publish a core-only build.")
         if output.exists():
