@@ -370,6 +370,9 @@ jobs:
         run: |
           python scripts/package_instance.py --instance verified/inputs/input/instance/instance.zip --binary verified/native-build-windows-x86_64/native-runtime/horizon-client.exe --mods verified/inputs/input/mods-latest --target windows-x86_64 --horizon-commit "$(cat verified/inputs/build-report/horizon-commit.txt)" --output dist/horizon-instance-windows-x86_64.zip
           python scripts/package_instance.py --instance verified/inputs/input/instance/instance.zip --binary verified/native-build-linux-x86_64/native-runtime/horizon-client --mods verified/inputs/input/mods-latest --target linux-x86_64 --horizon-commit "$(cat verified/inputs/build-report/horizon-commit.txt)" --output dist/horizon-instance-linux-x86_64.zip
+          mkdir -p dist/drop-in-windows dist/drop-in-linux
+          python -c "import zipfile; zipfile.ZipFile('dist/horizon-instance-windows-x86_64.zip').extractall('dist/drop-in-windows')"
+          python -c "import zipfile; zipfile.ZipFile('dist/horizon-instance-linux-x86_64.zip').extractall('dist/drop-in-linux')"
       - uses: actions/upload-artifact@v4
         with:
           name: horizon-instance-windows-x86_64
