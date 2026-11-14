@@ -136,7 +136,9 @@ def verify_artifacts(inputs: Path, linux: Path, windows: Path) -> dict:
         if fields.get("Target") != target:
             raise ValueError(f"{target}: build report target mismatch")
         mod_inputs = list((inputs / "input" / "mods-latest").glob("*.hnmod"))
-        if mod_inputs and (
+        if not mod_inputs:
+            raise ValueError("no registry-verified native mod packages were supplied")
+        if (
             fields.get("Optional native mods") != "built"
             or fields.get("Build mode") != "core+native-mods"
         ):
