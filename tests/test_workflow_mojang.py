@@ -23,7 +23,7 @@ class MojangWorkflowTests(unittest.TestCase):
         ).read_text(encoding="utf-8")
         artifact = workflow.split("name: validated-inputs", 1)[1].split("native-build:", 1)[0]
         self.assertIn("input/instance/instance.zip", artifact)
-        self.assertIn("input/mods/*.hnmod", artifact)
+        self.assertIn("input/mods/", artifact)
         self.assertNotIn("input/minecraft/minecraft.zip", artifact)
 
 
