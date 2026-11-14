@@ -62,7 +62,7 @@ Không đưa game ZIP lên Release công khai. Khi dùng cách Mojang mặc đ�
 
 ### D. Native mod bundles
 
-Đặt các file .hnmod tại input/mods/. Chỉ sử dụng mod mà bạn tin tưởng: .hnmod chứa native code và có thể thực thi mã trên runner.
+Đây là phần **tùy chọn**. Nếu muốn build thêm bản có mod, đặt các file .hnmod tại input/mods/. Không có .hnmod thì Builder vẫn biên dịch Horizon core client nguyên bản. Chỉ sử dụng mod mà bạn tin tưởng: .hnmod chứa native code và có thể thực thi mã trên runner.
 
 ## 3. Chạy workflow
 
@@ -87,11 +87,13 @@ Không đưa game ZIP lên Release công khai. Khi dùng cách Mojang mặc đ�
 
 Mỗi target runner thực hiện độc lập:
 
-1. Kiểm tra Horizon instance ZIP và .hnmod.
+1. Kiểm tra Horizon instance ZIP và các .hnmod nếu có.
 2. Tải Minecraft từ Mojang (hoặc tải ZIP tương thích cũ).
 3. Kiểm tra version metadata, client JAR, libraries, asset index và SHA-1 của assets.
-4. Giải nén game files và gọi horizon-launcher prepare --minecraft.
-5. Build native client và xác nhận binary thực tế tồn tại.
+4. Cài Horizon base và chuẩn bị resource bằng horizon-launcher prepare --minecraft.
+5. Biên dịch trực tiếp Horizon core client từ đúng commit đã pin.
+6. Nếu có .hnmod, giải nén an toàn theo cấu trúc bundle Horizon yêu cầu rồi build thêm native-mod client. Nếu không có mod, bỏ qua bước này.
+7. Xác minh định dạng ELF/PE, SHA-256 và commit Horizon của cả hai target.
 
 Minecraft ZIP chỉ tồn tại trong runner tạm thời; **không được upload thành artifact**. Như vậy repo public không vô tình phát tán bộ game đã tải.
 
@@ -99,10 +101,10 @@ Minecraft ZIP chỉ tồn tại trong runner tạm thời; **không được upl
 
 Tải artifact đúng hệ điều hành:
 
-- Windows: horizon-client.exe.
-- Linux: horizon-client.
+- Windows: horizon-client.exe (bản chính), horizon-client-core.exe (bản Horizon gốc).
+- Linux: horizon-client (bản chính), horizon-client-core (bản Horizon gốc).
 
-Sau đó chạy lệnh:
+Để import bản gốc không mod, chọn file có hậu tố -core. Để import bản chính (có mod nếu đã cung cấp .hnmod), chọn file không có hậu tố:
 
     horizon-launcher import-build <PATH-TO-horizon-client> --trust-unsigned
 
@@ -117,7 +119,7 @@ Chỉ import binary do bạn tự build hoặc đã kiểm tra. Horizon instance
 | SHA-1/kích thước không khớp | Downloader sẽ dừng thay vì dùng file hỏng; chạy lại workflow để tải lại |
 | Thiếu asset hoặc library | Kiểm tra log download; không bỏ qua bước xác minh |
 | ZIP Minecraft có sẵn không hợp lệ | Cung cấp full game directory ZIP; một client JAR đơn lẻ không đủ |
-| Native build thất bại | Xem log của Linux/Windows target; xác minh Horizon revision và từng .hnmod |
+| Native mod build thất bại | Xem log của Linux/Windows target; xác minh Horizon revision và từng .hnmod. Core client được build độc lập trước đó |
 | Build xong nhưng không chạy | Kiểm tra phiên bản Horizon base, target OS/CPU và import đúng binary |
 
 ## 7. Giới hạn và hướng phát triển
