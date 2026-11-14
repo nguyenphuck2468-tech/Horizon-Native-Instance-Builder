@@ -96,6 +96,12 @@ jobs:
           path: build-report/input-inspection.json
           if-no-files-found: error
           retention-days: 14
+      - uses: actions/upload-artifact@v4
+        with:
+          name: registry-mod-selection
+          path: build-report/registry-mods.json
+          if-no-files-found: error
+          retention-days: 14
       - name: Resolve the current official Horizon Nightly
         run: python scripts/resolve_horizon_revision.py --output build-report/horizon-commit.txt --report build-report/horizon-nightly.json
       - name: Download newest registry mods verified on this Nightly
@@ -247,7 +253,7 @@ jobs:
           echo "result=not-requested" >> "$GITHUB_OUTPUT"
           if ! find input/mods-latest-unpacked -mindepth 1 -maxdepth 1 -type d -print -quit | grep -q .; then
             echo "::error::No compatible registry native mods were selected; refusing a core-only build."
-            exit 0
+            exit 1
           fi
           if [[ "$RUNNER_OS" == "Windows" ]]; then
             CLI="horizon-src/launcher/target/release/horizon-launcher.exe"
