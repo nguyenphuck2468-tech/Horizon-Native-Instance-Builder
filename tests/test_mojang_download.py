@@ -145,5 +145,25 @@ class MojangDownloadTests(unittest.TestCase):
             self.assertFalse(output.exists())
 
 
+    def test_write_verified_retries_integrity_mismatch_and_cleans_part_file(self):
+        import io
+        import time
+        class Response:
+            def __init__(self, payload):
+                self.stream = io.BytesIO(payload)
+                self.headers = {}
+            def __enter__(self): return self
+            def __exit__(self, *args): return False
+            def geturl(self): return "https://launcher.mojang.com/client.jar"
+            def read(self, size): return self.stream.read(size)
+        payload = b"good-client"
+        with tempfile.TemporaryDirectory() as temp:
+            root = pathlib.Path(temp)
+            with patch.object(download_minecraft.urllib.request, "urlopen", side_effect=[Response(b"bad"), Response(payload)]) as opened, patch.object(download_minecraft.time, "sleep"):
+                result = download_minecraft._write_verified(root, "versions/test/test.jar", "https://launcher.mojang.com/client.jar", len(payload), hashlib.sha1(payload).hexdigest())
+            self.assertEqual(result.read_bytes(), payload)
+            self.assertEqual(opened.call_count, 2)
+            self.assertFalse(result.with_name(result.name + ".part").exists())
+
 if __name__ == "__main__":
     unittest.main()

@@ -20,7 +20,7 @@ on:
       minecraft_version:
         description: "Official Mojang version ID, latest-release, or latest-snapshot"
         required: true
-        default: "latest-release"
+        default: "26.3"
         type: string
       minecraft_release_tag:
         description: "Optional legacy Release tag containing a full Minecraft game-directory ZIP; leave blank to download from Mojang"
@@ -168,6 +168,11 @@ jobs:
           git clone https://github.com/nguyenphuck2468-tech/horizon.git horizon-src
           git -C horizon-src checkout --detach "$HORIZON_REV"
           echo "HORIZON_COMMIT=$(git -C horizon-src rev-parse HEAD)" >> "$GITHUB_ENV"
+      - name: Verify Minecraft version against selected Horizon lock
+        shell: bash
+        run: |
+          MINECRAFT_VERSION="$(python scripts/validate_horizon_version.py --lock horizon-src/research-lock.json --minecraft-zip input/minecraft/minecraft.zip --print-version)"
+          echo "MINECRAFT_VERSION=$MINECRAFT_VERSION" >> "$GITHUB_ENV"
       - name: Build Horizon launcher CLI
         working-directory: horizon-src
         shell: bash
@@ -202,7 +207,7 @@ jobs:
           TARGET: ${{ matrix.target }}
         run: |
           mkdir -p "native-runtime" "build-report/$TARGET"
-          printf 'Horizon commit: %s\nTarget: %s\nRunner: %s\n' "$HORIZON_COMMIT" "$TARGET" "$RUNNER_OS" > "build-report/$TARGET/build.txt"
+          printf 'Horizon commit: %s\nTarget: %s\nRunner: %s\n' "$HORIZON_COMMIT" "$MINECRAFT_VERSION" "$TARGET" "$RUNNER_OS" > "build-report/$TARGET/build.txt"
           if [[ -f native-build.log ]]; then
             cp native-build.log "build-report/$TARGET/"
           fi

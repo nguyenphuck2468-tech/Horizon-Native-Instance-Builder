@@ -80,7 +80,7 @@ def _read_url(url, expected_size=None, expected_sha1=None, max_bytes=MAX_DOWNLOA
             if expected_sha1 and actual_sha1.lower() != expected_sha1.lower():
                 raise ValueError(f"SHA-1 mismatch for {url}: expected {expected_sha1}, got {actual_sha1}")
             return b"".join(chunks)
-        except (urllib.error.URLError, TimeoutError, ConnectionError, OSError) as error:
+        except (urllib.error.URLError, TimeoutError, ConnectionError, OSError, ValueError) as error:
             last_error = error
             if attempt < 2:
                 time.sleep(0.5 * (attempt + 1))
@@ -118,7 +118,7 @@ def _write_verified(root, relative, url, size=None, sha1=None):
                 raise ValueError(f"SHA-1 mismatch for {url}: expected {sha1}, got {digest.hexdigest()}")
             temporary.replace(destination)
             return destination
-        except (urllib.error.URLError, TimeoutError, ConnectionError, OSError) as error:
+        except (urllib.error.URLError, TimeoutError, ConnectionError, OSError, ValueError) as error:
             last_error = error
             temporary.unlink(missing_ok=True)
             if attempt < 2:
