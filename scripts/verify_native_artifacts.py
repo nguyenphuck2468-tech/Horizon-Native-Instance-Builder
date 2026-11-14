@@ -146,16 +146,16 @@ def verify_artifacts(inputs: Path, linux: Path, windows: Path) -> dict:
                 f"{target}: {len(mod_inputs)} .hnmod input(s) were supplied, "
                 "but the artifact is not confirmed as a native-mod build"
             )
+        actual_commit = fields.get("Horizon commit", "").lower()
+        if actual_commit != pinned_commit:
+            raise ValueError(
+                f"{target}: Horizon commit mismatch; expected {pinned_commit}, got {actual_commit or '<missing>'}"
+            )
         native_version = fields.get("Native version", "")
         if mod_inputs and not native_version.startswith(f"native-{pinned_commit[:7]}-"):
             raise ValueError(
                 f"{target}: native build was not produced from the selected Nightly; "
                 f"expected native-{pinned_commit[:7]}..., got {native_version or '<missing>'}"
-            )
-        actual_commit = fields.get("Horizon commit", "").lower()
-        if actual_commit != pinned_commit:
-            raise ValueError(
-                f"{target}: Horizon commit mismatch; expected {pinned_commit}, got {actual_commit or '<missing>'}"
             )
         binary = root / "native-runtime" / client_name
         if not binary.is_file():
