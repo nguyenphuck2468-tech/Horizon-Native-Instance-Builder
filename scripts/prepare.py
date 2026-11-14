@@ -170,7 +170,7 @@ def validate_minecraft_archive(path, names):
             if version_id not in metadata_cache:
                 relative = f"versions/{version_id}/{version_id}.json"
                 metadata_cache[version_id] = read_json(relative, 4 * 1024 * 1024)
-                if metadata_cache[version_id].get("id") != version_id:
+                if metadata_cache[version_id].get("id") not in (None, version_id):
                     raise ValueError(f"Minecraft metadata ID mismatch: {relative}.")
             current = metadata_cache[version_id]
             value = current
