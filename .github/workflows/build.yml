@@ -82,6 +82,17 @@ jobs:
         run: python -m unittest discover -s tests -v
       - name: Validate Horizon instance and native mods
         run: python scripts/prepare.py
+      - name: Resolve the Horizon revision once for every platform
+        env:
+          HORIZON_REV: ${{ inputs.horizon_revision }}
+        shell: bash
+        run: |
+          git clone --filter=blob:none --no-checkout https://github.com/nguyenphuck2468-tech/horizon.git horizon-revision
+          git -C horizon-revision fetch --depth=1 origin "$HORIZON_REV"
+          HORIZON_COMMIT="$(git -C horizon-revision rev-parse 'FETCH_HEAD^{commit}')"
+          mkdir -p build-report
+          printf '%s\\n' "$HORIZON_COMMIT" > build-report/horizon-commit.txt
+          echo "Resolved Horizon revision: $HORIZON_COMMIT"
       - uses: actions/upload-artifact@v4
         with:
           name: validated-inputs
@@ -89,6 +100,7 @@ jobs:
             input/instance/instance.zip
             input/mods/*.hnmod
             build-report/input-manifest.json
+            build-report/horizon-commit.txt
           if-no-files-found: error
           retention-days: 7
 
@@ -125,14 +137,23 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y build-essential pkg-config libssl-dev cmake libxkbcommon-dev libwayland-dev libx11-dev libvulkan-dev libasound2-dev
-      - name: Checkout selected Horizon revision
+      - name: Checkout the exact Horizon revision resolved by validation
         shell: bash
-        env:
-          HORIZON_REV: ${{ inputs.horizon_revision }}
         run: |
-          git clone https://github.com/nguyenphuck2468-tech/horizon.git horizon-src
-          git -C horizon-src checkout --detach "$HORIZON_REV"
-          echo "HORIZON_COMMIT=$(git -C horizon-src rev-parse HEAD)" >> "$GITHUB_ENV"
+          HORIZON_COMMIT="$(cat build-report/horizon-commit.txt)"
+          if [[ ! "$HORIZON_COMMIT" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "::error::Validated Horizon commit is not an immutable full SHA-1."
+            exit 1
+          fi
+          git clone --filter=blob:none --no-checkout https://github.com/nguyenphuck2468-tech/horizon.git horizon-src
+          git -C horizon-src fetch --depth=1 origin "$HORIZON_COMMIT"
+          git -C horizon-src checkout --detach FETCH_HEAD
+          ACTUAL_COMMIT="$(git -C horizon-src rev-parse HEAD)"
+          if [[ "$ACTUAL_COMMIT" != "$HORIZON_COMMIT" ]]; then
+            echo "::error::Horizon revision mismatch: expected $HORIZON_COMMIT, got $ACTUAL_COMMIT"
+            exit 1
+          fi
+          echo "HORIZON_COMMIT=$ACTUAL_COMMIT" >> "$GITHUB_ENV"
       - name: Read Minecraft version pinned by Horizon
         shell: bash
         run: |
@@ -247,6 +268,41 @@ jobs:
             build-report/${{ matrix.target }}/
           if-no-files-found: error
           retention-days: 14
+
+  verify-native-artifacts:
+    needs: [validate, native-build]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Download validated inputs and both platform artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: "native-build-*"
+          path: verified
+          merge-multiple: false
+      - name: Download the pinned Horizon commit
+        uses: actions/download-artifact@v4
+        with:
+          name: validated-inputs
+          path: verified/inputs
+      - name: Verify both native artifacts use the same Horizon revision
+        run: |
+          python scripts/verify_native_artifacts.py \\
+            --inputs verified/inputs \\
+            --linux verified/native-build-linux-x86_64 \\
+            --windows verified/native-build-windows-x86_64 \\
+            --output build-report/native-build-verification.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: native-build-verification
+          path: build-report/native-build-verification.json
+          if-no-files-found: error
+          retention-days: 30
 
   preserve-instance:
     needs: validate
