@@ -1,139 +1,97 @@
-# Hướng dẫn sử dụng Horizon Native Instance Builder
+# Hướng dẫn Horizon Native Instance Builder
 
-Builder hiện có thể **tự tải Minecraft trực tiếp từ Mojang**. Bạn không cần tự tìm minecraft.zip, không cần tải riêng minecraft-26.3-client.jar, cũng không cần tự gom assets và libraries.
+Builder sẽ tạo bản Horizon native mới nhất cho Windows và Linux, kèm các native mod .hnmod mới nhất đã được kiểm tra tương thích với Nightly tương ứng. Máy của bạn không phải tự biên dịch.
 
-## 1. Builder tạo ra gì?
+## 1. Instance của bạn được giữ nguyên
 
-Khi build thành công, workflow tạo **một gói ZIP cho từng nền tảng**, gom instance backup gốc và native client đã biên dịch vào cùng một file:
+Đặt backup Horizon tại:
 
-- `horizon-instance-windows-x86_64`
-- `horizon-instance-linux-x86_64`
+- input/instance/instance.zip (khuyến nghị), hoặc
+- input/instance/horizon.zip (tên cũ vẫn được hỗ trợ).
 
-Bên trong mỗi ZIP:
-- `instance/instance.zip`: bản backup instance gốc, được giữ nguyên byte-for-byte.
-- `native/<target>/horizon-client[.exe]`: native client của đúng hệ điều hành.
-- `mods/*.hnmod`: các gói mod đầu vào để đối chiếu và lưu cùng bản build.
-- `build-manifest.json`: commit Horizon, SHA-256 và danh sách mod.
-- `README-INSTALL.txt`: hướng dẫn khôi phục instance và import native build.
+Đây là **dữ liệu instance Horizon**: thế giới, cấu hình, dữ liệu người chơi và thiết lập. Builder kiểm tra ZIP, giữ nguyên byte-for-byte và đưa nó vào gói kết quả. Builder không coi ZIP này là bộ cài Java, không chuyển đổi nó thành profile launcher khác và không ghi đè thế giới của bạn.
 
-Đây là **gói phát hành kết hợp**, không phải một định dạng instance ZIP mới do Horizon Launcher tự nhận diện. Sau khi giải nén, cần khôi phục/import backup bằng luồng instance của Horizon rồi import native client bằng `horizon-launcher import-build ... --trust-unsigned`. Không cần biên dịch trên máy cá nhân.
+Nếu backup nằm trong Release của repo, nhập instance_release_tag và instance_asset_name khi chạy workflow.
 
-Nếu đã cung cấp .hnmod mà native-mod build thất bại, workflow sẽ dừng và không phát hành binary core-only dưới tên bản có mod.
+## 2. Mod được cập nhật tự động
 
-## 2. Chuẩn bị đầu vào
+Các file .hnmod cũ trong input/mods/ được giữ lại làm bản dự phòng và để đối chiếu. Chúng không còn là bộ mod dùng cho bản build mới.
 
-### A. Horizon instance backup
+Khi chạy, workflow sẽ:
 
-Đây là ZIP dữ liệu Horizon (world, cấu hình, dữ liệu instance), không phải bộ cài Minecraft.
+1. Lấy commit bất biến của Horizon Nightly chính thức hiện tại.
+2. Đọc registry chính thức horizon-rust/horizon-mods.
+3. Đọc báo cáo native-health được tạo cho đúng Nightly đó.
+4. Tải phiên bản mới nhất của các mod đã chọn, kiểm tra SHA-256, kích thước và manifest bên trong .hnmod.
+5. Bỏ qua mod nếu báo cáo chính thức đánh dấu phiên bản mới nhất của nó bị lỗi trên Nightly đó.
+6. Dừng nếu báo cáo tương thích thuộc revision khác hoặc đã cũ, thay vì cố cài một bản không được xác nhận.
 
-Đặt một trong hai tên:
+Danh sách mod được cập nhật:
 
-- input/instance/instance.zip (ưu tiên).
-- input/instance/horizon.zip (tương thích tên cũ).
+- AppleSkin
+- The Basic HUD
+- Fast Items
+- Freecam+
+- Freelook
+- Fullbright
+- Jade
+- JEI
+- Mod Menu
+- Zoom
 
-Hoặc tải ZIP lên Release của repo Builder rồi nhập instance_release_tag và instance_asset_name.
+Không phải lúc nào cũng có thể dùng cả 10 mod trên Nightly mới nhất. Nếu một mod chưa tương thích, báo cáo registry-mods.json sẽ ghi rõ lý do và mod đó không được ép cài. Các mod còn lại vẫn được build nếu bộ mod được chọn hợp lệ.
 
-### B. Minecraft — tự tải từ Mojang
+## 3. Runtime Horizon
 
-Mặc định không cần chuẩn bị tệp nào. Mỗi runner Linux/Windows sẽ tự tải bộ Minecraft tương ứng từ manifest và máy chủ file chính thức của Mojang.
+Instance backup và runtime Horizon là hai thứ riêng biệt.
 
-Các trường có thể chọn khi chạy workflow:
+Horizon là client viết bằng Rust; builder tải dữ liệu runtime cần thiết từ Mojang để chuẩn bị Nightly. Phần tải này **không biến instance backup thành một bản cài Minecraft Java**, cũng không thay thế hay sửa thế giới trong backup.
 
-| minecraft_version | Ý nghĩa |
-|---|---|
-| latest-release | Bản phát hành ổn định mới nhất theo Mojang |
-| latest-snapshot | Snapshot mới nhất theo Mojang |
-| 26.3 | Tải đúng version 26.3 nếu version đó có trong manifest chính thức |
+Mặc định workflow tải runtime version 26.3 từ Mojang, kiểm tra metadata, thư viện và assets, rồi giữ các file tải về trong runner tạm thời. Chúng không được phát hành thành artifact công khai.
 
-Downloader tự lấy:
+## 4. Chạy build
 
-- Version JSON và client JAR.
-- Các library artifact và classifier được khai báo trong metadata.
-- Asset index.
-- Toàn bộ asset object mà index tham chiếu.
+1. Mở [repo Horizon Native Instance Builder](https://github.com/nguyenphuck2468-tech/Horizon-Native-Instance-Builder).
+2. Chọn **Actions → Build Horizon Native Instance**.
+3. Nhấn **Run workflow**.
+4. Giữ minecraft_version là 26.3 nếu Nightly hiện tại vẫn dùng version này.
+5. Để trống minecraft_release_tag để runner tự tải runtime từ Mojang.
+6. Nếu instance đã có trong repo thì không cần nhập instance_release_tag.
 
-Từng tệp được đối chiếu kích thước và SHA-1 với metadata Mojang. Downloader chỉ chấp nhận HTTPS từ tên miền Mojang/Minecraft chính thức, kiểm tra đường dẫn an toàn và thử lại khi kết nối bị ngắt.
+Horizon commit và bộ mod tương thích được tự động xác định, không cần tự chọn revision.
 
-**Lưu ý:** workflow không đăng nhập tài khoản Microsoft/Minecraft. Nó lấy metadata và file công khai từ Mojang; người chạy vẫn phải có quyền sử dụng game theo điều khoản Minecraft.
+## 5. Kết quả
 
-### C. Dùng ZIP Minecraft có sẵn (tùy chọn tương thích cũ)
+Khi Linux và Windows đều build, workflow tạo:
 
-Chỉ dùng cách này nếu bạn đã có một game directory ZIP hoàn chỉnh. ZIP phải chứa versions/<version>/<version>.json, client JAR đúng SHA-1, assets/indexes, asset objects và libraries.
+- horizon-instance-windows-x86_64
+- horizon-instance-linux-x86_64
 
-Không dùng riêng minecraft-26.3-client.jar làm toàn bộ ZIP: JAR chỉ là một phần của game directory.
+Mỗi ZIP chứa:
 
-Nếu ZIP nằm trong repository GitHub riêng tư:
-1. Lưu asset trong Release của repository private.
-2. Tạo Fine-grained token chỉ có Contents: Read-only cho repository đó.
-3. Lưu token thành Actions secret MINECRAFT_INPUTS_TOKEN trong repo Builder.
+- instance/instance.zip: backup Horizon gốc, giữ nguyên.
+- native/<target>/horizon-client[.exe]: native client đã build với mod được chọn.
+- mods/*.hnmod: đúng các gói mod đã dùng.
+- build-manifest.json: commit, SHA-256 và kích thước.
+- README-INSTALL.txt: hướng dẫn import.
 
-Không đưa game ZIP lên Release công khai. Khi dùng cách Mojang mặc định, không cần token này.
+Đây là gói kết hợp backup + native client, không phải định dạng instance mới để mở trực tiếp bằng double-click.
 
-### D. Native mod bundles
-
-Đây là phần **tùy chọn**. Nếu muốn build thêm bản có mod, đặt các file .hnmod tại input/mods/. Không có .hnmod thì Builder vẫn biên dịch Horizon core client nguyên bản. Chỉ sử dụng mod mà bạn tin tưởng: .hnmod chứa native code và có thể thực thi mã trên runner.
-
-## 3. Chạy workflow
-
-1. Mở [Horizon Native Instance Builder](https://github.com/nguyenphuck2468-tech/Horizon-Native-Instance-Builder).
-2. Chọn Actions → Build Horizon Native Instance.
-3. Nhấn Run workflow.
-4. Chọn các giá trị:
-
-| Trường | Giá trị |
-|---|---|
-| horizon_revision | Nhánh/tag/commit Horizon cần build |
-| instance_release_tag | Để trống nếu ZIP đã nằm trong repo; nếu tải từ Release thì nhập tag |
-| instance_asset_name | Tên ZIP backup, mặc định instance.zip |
-| minecraft_version | Mặc định 26.3; version phải khớp research-lock.json của revision Horizon đã chọn |
-| minecraft_release_tag | Để trống để tự tải Mojang; chỉ nhập nếu dùng ZIP Minecraft có sẵn |
-| minecraft_source_repository | Chỉ cần cho ZIP từ repo khác |
-| minecraft_asset_name | Tên ZIP có sẵn, mặc định minecraft.zip |
-
-**Khuyến nghị:** để minecraft_release_tag trống và giữ minecraft_version là 26.3 khi build Horizon main. Nếu chọn revision Horizon khác, hãy nhập đúng minecraft.version trong research-lock.json của revision đó. Workflow sẽ tự kiểm tra và dừng nếu version trong ZIP không khớp.
-
-## 4. Các bước build
-
-Mỗi target runner thực hiện độc lập:
-
-1. Kiểm tra Horizon instance ZIP và các .hnmod nếu có.
-2. Tải Minecraft từ Mojang (hoặc tải ZIP tương thích cũ).
-3. Kiểm tra version metadata, client JAR, libraries, asset index và SHA-1 của assets.
-4. Cài Horizon base và chuẩn bị resource bằng horizon-launcher prepare --minecraft.
-5. Biên dịch trực tiếp Horizon core client từ đúng commit đã pin.
-6. Nếu có .hnmod, giải nén an toàn theo cấu trúc bundle Horizon yêu cầu rồi build thêm native-mod client. Nếu không có mod, bỏ qua bước này.
-7. Xác minh định dạng ELF/PE, SHA-256 và commit Horizon của cả hai target.
-
-Minecraft ZIP chỉ tồn tại trong runner tạm thời; **không được upload thành artifact**. Như vậy repo public không vô tình phát tán bộ game đã tải.
-
-## 5. Import vào Horizon
-
-Tải artifact đúng hệ điều hành:
-
-- Windows: horizon-client.exe (bản chính), horizon-client-core.exe (bản Horizon gốc).
-- Linux: horizon-client (bản chính), horizon-client-core (bản Horizon gốc).
-
-Để import bản gốc không mod, chọn file có hậu tố -core. Để import bản chính (có mod nếu đã cung cấp .hnmod), chọn file không có hậu tố:
+Sau khi giải nén:
+1. Khôi phục/import instance/instance.zip bằng luồng instance của Horizon.
+2. Import native client bằng lệnh:
 
     horizon-launcher import-build <PATH-TO-horizon-client> --trust-unsigned
 
-Chỉ import binary do bạn tự build hoặc đã kiểm tra. Horizon instance backup được cung cấp riêng để khôi phục world/cấu hình khi cần.
+Chỉ import binary bạn tự build và tin cậy.
 
-## 6. Xử lý lỗi
+## 6. Bảo mật và kiểm tra
 
-| Lỗi | Cách xử lý |
-|---|---|
-| Version không có trong Mojang manifest | Kiểm tra lại ID version; thử latest-release hoặc version chính xác đang được Mojang công bố |
-| Không tải được manifest/metadata | Kiểm tra kết nối runner tới piston-meta.mojang.com; không tắt TLS hoặc chuyển sang mirror không rõ nguồn |
-| SHA-1/kích thước không khớp | Downloader sẽ dừng thay vì dùng file hỏng; chạy lại workflow để tải lại |
-| Thiếu asset hoặc library | Kiểm tra log download; không bỏ qua bước xác minh |
-| ZIP Minecraft có sẵn không hợp lệ | Cung cấp full game directory ZIP; một client JAR đơn lẻ không đủ |
-| Native mod build thất bại | Xem log của Linux/Windows target; xác minh Horizon revision và từng .hnmod. Core client được build độc lập trước đó |
-| Build xong nhưng không chạy | Kiểm tra phiên bản Horizon base, target OS/CPU và import đúng binary |
+Native mod là mã Rust chạy với quyền của người dùng, không được sandbox. Registry review và SHA-256 giúp xác minh nguồn và tính toàn vẹn, nhưng không khiến mã native trở nên vô hại.
 
-## 7. Giới hạn và hướng phát triển
+Nếu build thất bại, kiểm tra:
+- registry-mods.json: các mod đã chọn và mod bị loại.
+- native-build.log: lỗi áp dụng mixin hoặc biên dịch.
+- build.txt: Horizon commit, native version và target.
 
-- Linux x86_64 và Windows x86_64 đang là hai target cấu hình.
-- macOS cần workflow/runner và kiểm thử riêng.
-- Việc tải game không thay thế đăng nhập tài khoản Minecraft khi chơi.
-- Compile thành công chưa đồng nghĩa runtime đã ổn định; cần kiểm thử import và khởi chạy trên máy đích.
+Workflow không dùng --allow-version-mismatch; không phát hành bản core-only giả làm bản có mod. Hãy thử khởi chạy bản import trước khi dùng với thế giới quan trọng.
