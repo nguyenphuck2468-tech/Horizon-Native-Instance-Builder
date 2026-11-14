@@ -260,7 +260,10 @@ jobs:
             echo "result=failed" >> "$GITHUB_OUTPUT"
             echo "::error::Native-mod build failed (exit $status). Refusing to publish a core-only binary as a modded build."
           fi
-          if grep -q '^result=failed
+          if grep -q "^result=failed$" "$GITHUB_OUTPUT"; then
+            exit 1
+          fi
+      - name: Collect the actual native client and build facts
         if: always()
         shell: bash
         env:
