@@ -27,10 +27,10 @@ def _report(path: Path) -> dict[str, str]:
     return fields
 
 
-def _file_identity(metadata: os.stat_result) -> tuple[int, int, int, int, int, int]:
+def _file_identity(metadata: os.stat_result) -> tuple[int, int, int, int]:
+    # Windows may report different st_dev/st_ino values for path and open-handle
+    # metadata. Compare portable file attributes and timestamps instead.
     return (
-        metadata.st_dev,
-        metadata.st_ino,
         metadata.st_mode,
         metadata.st_size,
         metadata.st_mtime_ns,
