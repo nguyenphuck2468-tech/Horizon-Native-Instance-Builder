@@ -52,6 +52,20 @@ class NativeArtifactVerificationTests(unittest.TestCase):
                 self.assertGreater(target["bytes"], 0)
                 self.assertEqual(len(target["sha256"]), 64)
 
+    def test_verifies_separately_published_core_client(self):
+        with tempfile.TemporaryDirectory() as temp:
+            inputs, linux, windows = self._fixture(Path(temp))
+            for root, source, core_name in (
+                (linux, "horizon-client", "horizon-client-core"),
+                (windows, "horizon-client.exe", "horizon-client-core.exe"),
+            ):
+                runtime = root / "native-runtime"
+                runtime.joinpath(core_name).write_bytes(runtime.joinpath(source).read_bytes())
+            result = verify_artifacts(inputs, linux, windows)
+            for target in result["targets"].values():
+                self.assertIn("core_client", target)
+                self.assertEqual(len(target["core_client"]["sha256"]), 64)
+
     def test_rejects_wrong_native_machine_architecture(self):
         with tempfile.TemporaryDirectory() as temp:
             inputs, linux, windows = self._fixture(Path(temp))
