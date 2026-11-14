@@ -8,7 +8,10 @@ import shutil
 import tempfile
 import zipfile
 
-from scripts.prepare import validate_zip
+try:
+    from scripts.prepare import validate_zip
+except ModuleNotFoundError:  # direct execution: python scripts/extract_native_mods.py
+    from prepare import validate_zip
 
 
 def extract_bundle(archive_path: pathlib.Path, destination: pathlib.Path) -> pathlib.Path:
@@ -28,6 +31,8 @@ def extract_bundle(archive_path: pathlib.Path, destination: pathlib.Path) -> pat
         with zipfile.ZipFile(archive_path) as bundle:
             raw_manifest = bundle.read(native[0])
             manifest = json.loads(raw_manifest)
+            if not isinstance(manifest, dict):
+                raise ValueError(f"{archive_path.name}: horizon-native.json must contain a JSON object")
             mod_id = manifest.get("id")
             if not isinstance(mod_id, str) or not re.fullmatch(r"[a-z][a-z0-9_-]{0,63}", mod_id):
                 raise ValueError(f"{archive_path.name}: invalid or missing native mod id")
@@ -62,7 +67,7 @@ def extract_bundle(archive_path: pathlib.Path, destination: pathlib.Path) -> pat
                     raise ValueError(f"{archive_path.name}: mixin manifest was not extracted")
                 shutil.move(str(staging), str(target))
             return target
-    except (zipfile.BadZipFile, json.JSONDecodeError) as error:
+    except (zipfile.BadZipFile, json.JSONDecodeError, UnicodeDecodeError) as error:
         raise ValueError(f"{archive_path.name}: invalid native mod archive: {error}") from error
 
 
