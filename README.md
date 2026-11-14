@@ -2,7 +2,7 @@
 
 A GitHub Actions builder for Horizon native clients. It preserves the Horizon instance backup separately and obtains Minecraft game files directly from Mojang by default. Native mods are supplied as .hnmod bundles.
 
-**Start here:** [Vietnamese usage guide](docs/HUONG-DAN.md).
+**Start here:** [Vietnamese usage guide](docs/HUONG-DAN.md). For a local, dependency-free preflight interface, open [the guided build wizard](tools/builder-wizard.html) in a modern browser.
 
 ## Inputs
 

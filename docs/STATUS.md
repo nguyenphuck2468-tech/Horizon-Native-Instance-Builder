@@ -14,6 +14,7 @@ Implemented in the workflow:
 - The workflow installs and prepares a published Horizon base before invoking the client native-build command.
 - The actual platform-specific horizon-client binary is required and uploaded; a launcher-only compile is not counted as success.
 - Manual GitHub Actions workflow, read-only token, no secrets, Linux x86_64 and Windows x86_64 jobs.
+- A local-only guided build wizard checks the Horizon instance ZIP signature and generates the matching GitHub CLI dispatch command; it does not upload files or replace server-side validation.
 
 Still requires a real Actions run to certify:
 
