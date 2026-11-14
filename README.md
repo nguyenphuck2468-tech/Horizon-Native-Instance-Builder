@@ -34,11 +34,12 @@ An optional legacy path remains available: set minecraft_release_tag and the wor
 
 For Linux x86_64 and Windows x86_64, the workflow:
 
-1. Validates the Horizon instance archive and trusted .hnmod bundles.
+1. Validates the Horizon instance archive and any supplied .hnmod bundles; no mod is required for a core build.
 2. Downloads the selected Minecraft version from Mojang independently on each runner (or retrieves the optional private/prebuilt ZIP), then validates the client JAR, asset index and assets.
 3. Resolves the selected Horizon ref to one immutable commit before the platform jobs start, then checks out that exact commit for both targets and records its SHA in each build report.
-4. Installs the latest published Horizon base, prepares it from the downloaded Minecraft files, and invokes horizon-launcher native-build.
-5. Publishes the actual horizon-client / horizon-client.exe binary and build reports, then runs a cross-platform verification job that checks both executable formats, hashes, and matching Horizon commit IDs before publishing a VERIFIED report. The original Horizon instance ZIP is preserved as a separate artifact.
+4. Installs the latest published Horizon base and prepares it from the downloaded Minecraft files.
+5. Compiles the upstream Horizon core client directly from the pinned source. If .hnmod files are supplied, it safely extracts each bundle into Horizon's required directory layout and additionally invokes horizon-launcher native-build; otherwise the core binary is used as the primary client.
+6. Publishes both the core client and (when requested) the native-mod client, then verifies the primary executable format, hash, and matching Horizon commit IDs. The original Horizon instance ZIP is preserved as a separate artifact.
 
 The workflow does not sign in to a Microsoft/Minecraft account. Mojang's public version metadata and game-file endpoints are used; access to the game and compliance with the Minecraft EULA remain the user's responsibility.
 
