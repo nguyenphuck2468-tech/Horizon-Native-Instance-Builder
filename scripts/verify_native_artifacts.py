@@ -27,10 +27,10 @@ def _report(path: Path) -> dict[str, str]:
     return fields
 
 
-def _file_identity(metadata: os.stat_result) -> tuple[int, int, int, int]:
-    # Windows may report different st_dev/st_ino values for path and open-handle
-    # metadata. Compare portable file attributes and timestamps instead.
+def _file_identity(metadata: os.stat_result) -> tuple[int, int, int, int, int, int]:
     return (
+        metadata.st_dev,
+        metadata.st_ino,
         metadata.st_mode,
         metadata.st_size,
         metadata.st_mtime_ns,
@@ -58,7 +58,9 @@ def _inspect_binary(path: Path, target: str) -> tuple[int, str]:
         before = os.fstat(stream.fileno())
         if not stat.S_ISREG(before.st_mode) or _is_reparse_point(before):
             raise ValueError(f"{target}: native client is not a regular file")
-        if _file_identity(path_before) != _file_identity(before):
+        # Compare path metadata with path metadata and handle metadata with handle
+        # metadata separately: Windows may expose different file IDs for lstat/fstat.
+        if not stat.S_ISREG(path_before.st_mode) or path_before.st_size != before.st_size:
             raise ValueError(f"{target}: native client changed before verification")
         size = before.st_size
         if size <= 0:
@@ -106,7 +108,7 @@ def _inspect_binary(path: Path, target: str) -> tuple[int, str]:
             raise ValueError(f"{target}: native client path changed during verification") from error
         if (
             _file_identity(before) != _file_identity(after)
-            or _file_identity(after) != _file_identity(path_after)
+            or _file_identity(path_before) != _file_identity(path_after)
             or _is_reparse_point(path_after)
             or bytes_read != size
         ):
