@@ -348,6 +348,22 @@ jobs:
             --linux verified/native-build-linux-x86_64 \
             --windows verified/native-build-windows-x86_64 \
             --output build-report/native-build-verification.json
+      - name: Package Windows and Linux instance bundles
+        run: |
+          python scripts/package_instance.py --instance verified/inputs/input/instance/instance.zip --binary verified/native-build-windows-x86_64/native-runtime/horizon-client.exe --mods verified/inputs/input/mods --target windows-x86_64 --horizon-commit "$(cat verified/inputs/build-report/horizon-commit.txt)" --output dist/horizon-instance-windows-x86_64.zip
+          python scripts/package_instance.py --instance verified/inputs/input/instance/instance.zip --binary verified/native-build-linux-x86_64/native-runtime/horizon-client --mods verified/inputs/input/mods --target linux-x86_64 --horizon-commit "$(cat verified/inputs/build-report/horizon-commit.txt)" --output dist/horizon-instance-linux-x86_64.zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: horizon-instance-windows-x86_64
+          path: dist/horizon-instance-windows-x86_64.zip
+          if-no-files-found: error
+          retention-days: 30
+      - uses: actions/upload-artifact@v4
+        with:
+          name: horizon-instance-linux-x86_64
+          path: dist/horizon-instance-linux-x86_64.zip
+          if-no-files-found: error
+          retention-days: 30
       - uses: actions/upload-artifact@v4
         with:
           name: native-build-verification
@@ -481,42 +497,3 @@ jobs:
           if-no-files-found: error
           retention-days: 30
 
-  package-instance:
-    if: ${{ github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[build-native]') }}
-    needs: [validate, native-build, verify-native-artifacts]
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - target: windows-x86_64
-            client: horizon-client.exe
-          - target: linux-x86_64
-            client: horizon-client
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          persist-credentials: false
-      - uses: actions/download-artifact@v4
-        with:
-          name: validated-inputs
-          path: inputs
-      - uses: actions/download-artifact@v4
-        with:
-          name: native-build-${{ matrix.target }}
-          path: native-build
-      - name: Assemble and verify complete downloadable bundle
-        run: |
-          python scripts/package_instance.py \\
-            --instance inputs/input/instance/instance.zip \\
-            --binary "native-build/native-runtime/${{ matrix.client }}" \\
-            --mods inputs/input/mods \\
-            --target "${{ matrix.target }}" \\
-            --horizon-commit "$(cat inputs/build-report/horizon-commit.txt)" \\
-            --output "dist/horizon-instance-${{ matrix.target }}.zip"
-      - uses: actions/upload-artifact@v4
-        with:
-          name: horizon-instance-${{ matrix.target }}
-          path: dist/horizon-instance-${{ matrix.target }}.zip
-          if-no-files-found: error
-          retention-days: 30
