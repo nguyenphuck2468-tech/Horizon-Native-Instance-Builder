@@ -96,18 +96,18 @@ jobs:
           path: build-report/input-inspection.json
           if-no-files-found: error
           retention-days: 14
-      - uses: actions/upload-artifact@v4
-        with:
-          name: registry-mod-selection
-          path: build-report/registry-mods.json
-          if-no-files-found: error
-          retention-days: 14
       - name: Resolve the current official Horizon Nightly
         run: python scripts/resolve_horizon_revision.py --output build-report/horizon-commit.txt --report build-report/horizon-nightly.json
       - name: Download newest registry mods verified on this Nightly
         run: python scripts/download_registry_mods.py --game 26.3 --horizon-commit "$(cat build-report/horizon-commit.txt)" --output input/mods-latest --report build-report/registry-mods.json
       - name: Verify selected registry native-mod extraction layout
         run: python scripts/extract_native_mods.py input/mods-latest --destination build-report/validated-native-mods-latest
+      - uses: actions/upload-artifact@v4
+        with:
+          name: registry-mod-selection
+          path: build-report/registry-mods.json
+          if-no-files-found: error
+          retention-days: 14
       - uses: actions/upload-artifact@v4
         with:
           name: validated-inputs
