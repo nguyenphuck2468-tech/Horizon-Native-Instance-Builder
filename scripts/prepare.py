@@ -384,7 +384,7 @@ def main():
     count, _ = validate_zip(instance)
     mods = sorted(p for p in mods_dir.glob("*.hnmod") if p.is_file())
     if not mods:
-        raise SystemExit(f"No .hnmod files found in {mods_dir}")
+        print(f"No .hnmod files found in {mods_dir}; validating a core-only Horizon build.")
     records = []
     for mod in mods:
         _, mod_names = validate_zip(mod)
