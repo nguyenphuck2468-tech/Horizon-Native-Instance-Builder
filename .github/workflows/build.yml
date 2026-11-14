@@ -80,6 +80,7 @@ jobs:
           SOURCE_REPOSITORY: ${{ inputs.minecraft_source_repository }}
           TAG: ${{ inputs.minecraft_release_tag }}
           ASSET: ${{ inputs.minecraft_asset_name }}
+        shell: bash
         run: |
           SOURCE_REPOSITORY="${SOURCE_REPOSITORY:-$GITHUB_REPOSITORY}"
           if [[ "$SOURCE_REPOSITORY" != "$GITHUB_REPOSITORY" && -z "$MINECRAFT_INPUTS_TOKEN" ]]; then

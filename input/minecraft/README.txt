@@ -1,1 +1,1 @@
-Place a full Minecraft game-directory ZIP here as minecraft.zip. It must contain versions/<version>/<version>.json and matching assets/libraries. This is separate from input/instance/horizon.zip, which is only the Horizon data/instance backup.
+Minecraft files are downloaded directly from Mojang by default when the Build Horizon Native Instance workflow runs. No local ZIP is required. To use a prebuilt full game-directory ZIP instead, provide minecraft.zip and set minecraft_release_tag to the Release containing it. A single client JAR is not a complete game directory.
