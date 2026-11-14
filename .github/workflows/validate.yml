@@ -29,6 +29,8 @@ jobs:
           python-version: "3.12"
       - name: Test archive validation and extraction
         run: python -m unittest discover -s tests -v
+      - name: Test safe native-mod bundle extraction when present
+        run: python scripts/extract_native_mods.py input/mods --destination build-report/validated-native-mods
       - name: Validate supplied ZIP and native mods when present
         run: |
           if [ -f input/instance/instance.zip ] || [ -f input/instance/horizon.zip ]; then
