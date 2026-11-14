@@ -207,7 +207,7 @@ jobs:
           TARGET: ${{ matrix.target }}
         run: |
           mkdir -p "native-runtime" "build-report/$TARGET"
-          printf 'Horizon commit: %s\nTarget: %s\nRunner: %s\n' "$HORIZON_COMMIT" "$MINECRAFT_VERSION" "$TARGET" "$RUNNER_OS" > "build-report/$TARGET/build.txt"
+          printf 'Horizon commit: %s\nMinecraft version: %s\nTarget: %s\nRunner: %s\n' "$HORIZON_COMMIT" "$MINECRAFT_VERSION" "$TARGET" "$RUNNER_OS" > "build-report/$TARGET/build.txt"
           if [[ -f native-build.log ]]; then
             cp native-build.log "build-report/$TARGET/"
           fi

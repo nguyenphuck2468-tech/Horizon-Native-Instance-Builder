@@ -9,7 +9,7 @@ class MojangWorkflowTests(unittest.TestCase):
             / ".github/workflows/build.yml"
         ).read_text(encoding="utf-8")
         self.assertIn('minecraft_version:', workflow)
-        self.assertIn('default: "latest-release"', workflow)
+        self.assertIn('default: "26.3"', workflow)
         self.assertIn('required: false', workflow.split('minecraft_release_tag:', 1)[1].split('minecraft_source_repository:', 1)[0])
         self.assertIn('python scripts/download_minecraft.py --version "$VERSION" --output input/minecraft/minecraft.zip', workflow)
         self.assertIn("if: ${{ inputs.minecraft_release_tag == '' }}", workflow)
