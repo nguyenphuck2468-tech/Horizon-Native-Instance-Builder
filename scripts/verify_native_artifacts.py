@@ -135,7 +135,7 @@ def verify_artifacts(inputs: Path, linux: Path, windows: Path) -> dict:
         fields = _report(report_path)
         if fields.get("Target") != target:
             raise ValueError(f"{target}: build report target mismatch")
-        mod_inputs = list((inputs / "input" / "mods").glob("*.hnmod"))
+        mod_inputs = list((inputs / "input" / "mods-latest").glob("*.hnmod"))
         if mod_inputs and (
             fields.get("Optional native mods") != "built"
             or fields.get("Build mode") != "core+native-mods"
@@ -143,6 +143,12 @@ def verify_artifacts(inputs: Path, linux: Path, windows: Path) -> dict:
             raise ValueError(
                 f"{target}: {len(mod_inputs)} .hnmod input(s) were supplied, "
                 "but the artifact is not confirmed as a native-mod build"
+            )
+        native_version = fields.get("Native version", "")
+        if mod_inputs and not native_version.startswith(f"native-{pinned_commit[:7]}-"):
+            raise ValueError(
+                f"{target}: native build was not produced from the selected Nightly; "
+                f"expected native-{pinned_commit[:7]}..., got {native_version or '<missing>'}"
             )
         actual_commit = fields.get("Horizon commit", "").lower()
         if actual_commit != pinned_commit:
