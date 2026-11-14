@@ -1,4 +1,5 @@
 name: Build Horizon Native Instance
+# [build-native] Rebuild both native targets after CI dependency and optional-mod fallback fixes.
 # Push builds are opt-in: use [build-native] in a main-branch commit message.
 
 on:
