@@ -36,6 +36,7 @@ def fetch_release() -> dict:
         "name": value.get("name", ""),
         "published_at": value.get("published_at", ""),
         "commit": commit,
+        "install_tag": f"nightly-{value.get('published_at', '')[:10]}-{commit[:7]}",
         "url": value.get("html_url", ""),
     }
 
