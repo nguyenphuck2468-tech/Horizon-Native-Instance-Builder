@@ -20,14 +20,16 @@ HEALTH_URL = "https://github.com/horizon-rust/horizon-mods/releases/download/nat
 HEALTH_RELEASE_API = "https://api.github.com/repos/horizon-rust/horizon-mods/releases/tags/native-health"
 DEFAULT_IDS = (
     "appleskin",
-    "basic_hud",
+    "hud_plus",
     "fast_items",
-    "freecam_plus",
-    "freelook",
+    "freecam",
+    "keystrokes",
+    "minimap",
     "fullbright_horizon",
     "jade",
     "jei",
-    "mod_menu",
+    "status_effect_hud",
+    "toggle_sprint",
     "zoom",
 )
 SHA256 = re.compile(r"^[0-9a-f]{64}$")
