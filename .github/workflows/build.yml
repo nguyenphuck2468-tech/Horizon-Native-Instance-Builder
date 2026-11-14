@@ -80,7 +80,7 @@ jobs:
           fi
       - name: Test archive validation and extraction
         run: python -m unittest discover -s tests -v
-      - name: Validate Horizon instance and native mods
+      - name: Validate Horizon instance and optional native mods
         run: python scripts/prepare.py
       - name: Resolve the Horizon revision once for every platform
         env:
@@ -136,7 +136,7 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y build-essential pkg-config libssl-dev cmake libxkbcommon-dev libwayland-dev libx11-dev libvulkan-dev libasound2-dev
+          sudo apt-get install -y build-essential pkg-config libssl-dev cmake libfontconfig1-dev libxkbcommon-dev libwayland-dev libx11-dev libvulkan-dev libasound2-dev
       - name: Checkout the exact Horizon revision resolved by validation
         shell: bash
         run: |
@@ -220,16 +220,26 @@ jobs:
           fi
           "$CLI" install latest
           "$CLI" prepare --minecraft "$MINECRAFT_DIR"
-      - name: Build native client from trusted mods
+      - name: Safely extract optional .hnmod bundles
+        run: python scripts/extract_native_mods.py input/mods --destination input/mods-unpacked
+      - name: Build the Horizon core client
+        working-directory: horizon-src
+        shell: bash
+        run: cargo build --locked --release -p horizon-client --bin horizon-client
+      - name: Build optional native-mod variant
         shell: bash
         run: |
+          if ! find input/mods-unpacked -mindepth 1 -maxdepth 1 -type d -print -quit | grep -q .; then
+            echo "No native mod bundles supplied; the core client is the primary build."
+            exit 0
+          fi
           if [[ "$RUNNER_OS" == "Windows" ]]; then
             CLI="horizon-src/launcher/target/release/horizon-launcher.exe"
           else
             CLI="horizon-src/launcher/target/release/horizon-launcher"
           fi
           set -o pipefail
-          "$CLI" native-build input/mods --trust-native-code --profile performance 2>&1 | tee native-build.log
+          "$CLI" native-build input/mods-unpacked --trust-native-code --profile performance 2>&1 | tee native-build.log
       - name: Collect the actual native client and build facts
         if: always()
         shell: bash
@@ -238,26 +248,42 @@ jobs:
           TARGET: ${{ matrix.target }}
         run: |
           mkdir -p "native-runtime" "build-report/$TARGET"
-          printf 'Horizon commit: %s\nMinecraft version: %s\nTarget: %s\nRunner: %s\n' "$HORIZON_COMMIT" "$MINECRAFT_VERSION" "$TARGET" "$RUNNER_OS" > "build-report/$TARGET/build.txt"
+          printf 'Horizon commit: %s\\nMinecraft version: %s\\nTarget: %s\\nRunner: %s\\n' "$HORIZON_COMMIT" "$MINECRAFT_VERSION" "$TARGET" "$RUNNER_OS" > "build-report/$TARGET/build.txt"
           if [[ -f native-build.log ]]; then
             cp native-build.log "build-report/$TARGET/"
           fi
+          if [[ "$RUNNER_OS" == "Windows" ]]; then
+            CORE="horizon-src/target/release/horizon-client.exe"
+            CORE_NAME="horizon-client-core.exe"
+          else
+            CORE="horizon-src/target/release/horizon-client"
+            CORE_NAME="horizon-client-core"
+          fi
+          if [[ ! -f "$CORE" ]]; then
+            echo "::error::The Horizon core client was not compiled."
+            exit 1
+          fi
+          cp "$CORE" "native-runtime/$CORE_NAME"
           DATA_HOME="$HORIZON_LAUNCHER_HOME"
           if [[ "$RUNNER_OS" == "Windows" ]]; then
             DATA_HOME="$(cygpath -u "$HORIZON_LAUNCHER_HOME")"
           fi
+          BUILT_MOD=0
           if [[ -d "$DATA_HOME/versions" ]]; then
             find "$DATA_HOME/versions" -maxdepth 2 -type f -name "$CLIENT" -print > "build-report/$TARGET/candidate-files.txt"
             for candidate in "$DATA_HOME"/versions/native-*/"$CLIENT"; do
               if [[ -f "$candidate" ]]; then
                 cp "$candidate" "native-runtime/$CLIENT"
+                BUILT_MOD=1
                 break
               fi
             done
           fi
-          if [[ ! -f "native-runtime/$CLIENT" ]]; then
-            echo "::error::No native client binary was produced. Inspect the native-build log and candidate-files report."
-            exit 1
+          if [[ "$BUILT_MOD" -eq 0 ]]; then
+            cp "$CORE" "native-runtime/$CLIENT"
+            echo "Build mode: core-only" >> "build-report/$TARGET/build.txt"
+          else
+            echo "Build mode: core+native-mods" >> "build-report/$TARGET/build.txt"
           fi
       - uses: actions/upload-artifact@v4
         if: always()
