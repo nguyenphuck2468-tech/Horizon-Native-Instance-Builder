@@ -13,6 +13,9 @@ class NativeArtifactVerificationTests(unittest.TestCase):
         inputs.joinpath("build-report", "horizon-commit.txt").write_text(
             commit + "\n", encoding="ascii"
         )
+        mod_dir = inputs / "input" / "mods-latest"
+        mod_dir.mkdir(parents=True)
+        mod_dir.joinpath("sample-1.0.0.hnmod").write_bytes(b"test bundle")
         linux = root / "linux"
         windows = root / "windows"
         for base, target, client in (
@@ -22,7 +25,9 @@ class NativeArtifactVerificationTests(unittest.TestCase):
             report = base / "build-report" / target
             report.mkdir(parents=True)
             report.joinpath("build.txt").write_text(
-                f"Horizon commit: {commit}\nTarget: {target}\nRunner: test\n",
+                f"Horizon commit: {commit}\nTarget: {target}\nRunner: test\n"
+                f"Optional native mods: built\nBuild mode: core+native-mods\n"
+                f"Native version: native-{commit[:7]}-test\n",
                 encoding="utf-8",
             )
             runtime = base / "native-runtime"
@@ -145,7 +150,9 @@ class NativeArtifactVerificationTests(unittest.TestCase):
             inputs, linux, windows = self._fixture(Path(temp))
             report = windows / "build-report" / "windows-x86_64" / "build.txt"
             report.write_text(
-                f"Horizon commit: {'b' * 40}\nTarget: windows-x86_64\n",
+                f"Horizon commit: {'b' * 40}\nTarget: windows-x86_64\n"
+                "Optional native mods: built\nBuild mode: core+native-mods\n"
+                f"Native version: native-{'b' * 7}-test\n",
                 encoding="utf-8",
             )
             with self.assertRaisesRegex(ValueError, "Horizon commit mismatch"):
