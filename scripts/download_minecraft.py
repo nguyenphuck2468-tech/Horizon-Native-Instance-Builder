@@ -150,7 +150,7 @@ def _download_version(version_id, manifest_versions, root, visited, libraries, a
 
     metadata_path = root / "versions" / version_id / f"{version_id}.json"
     metadata_path.parent.mkdir(parents=True, exist_ok=True)
-    metadata_path.write_bytes(json.dumps(metadata, indent=2, ensure_ascii=False).encode("utf-8") + b"\n")
+    metadata_path.write_bytes(metadata_bytes)
 
     client = metadata.get("downloads", {}).get("client") if isinstance(metadata.get("downloads"), dict) else None
     if client:
@@ -234,7 +234,7 @@ def _download_asset(root, logical_name, record):
     return relative
 
 
-def download_game(version, output_zip):
+def download_game(version, output_zip, expected_version=None):
     manifest_bytes = _read_url(MANIFEST_URL, max_bytes=MAX_METADATA_BYTES)
     manifest = json.loads(manifest_bytes)
     versions = manifest.get("versions")
@@ -247,6 +247,12 @@ def download_game(version, output_zip):
     else:
         version_id = version
     _metadata_entry(version_id, versions)
+    if expected_version and version_id != expected_version:
+        raise ValueError(
+            f"Selected Horizon revision requires Minecraft {expected_version}, "
+            f"but requested Mojang version resolves to {version_id}. "
+            f"Set minecraft_version to {expected_version}."
+        )
 
     output_zip = pathlib.Path(output_zip)
     output_zip.parent.mkdir(parents=True, exist_ok=True)
@@ -323,9 +329,10 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--version", default="latest-release", help="Mojang version ID, latest-release, or latest-snapshot")
     parser.add_argument("--output", type=pathlib.Path, default=pathlib.Path("input/minecraft/minecraft.zip"))
+    parser.add_argument("--expected-version", help="Fail before downloading game files unless the selected version matches Horizon")
     args = parser.parse_args()
     try:
-        download_game(args.version, args.output)
+        download_game(args.version, args.output, args.expected_version)
     except (KeyError, TypeError, json.JSONDecodeError, ValueError, RuntimeError, OSError) as error:
         raise SystemExit(f"Minecraft download failed: {error}") from error
 

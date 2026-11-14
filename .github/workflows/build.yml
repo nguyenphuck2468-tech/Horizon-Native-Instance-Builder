@@ -125,14 +125,32 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y build-essential pkg-config libssl-dev cmake libxkbcommon-dev libwayland-dev libx11-dev libvulkan-dev libasound2-dev
+      - name: Checkout selected Horizon revision
+        shell: bash
+        env:
+          HORIZON_REV: ${{ inputs.horizon_revision }}
+        run: |
+          git clone https://github.com/nguyenphuck2468-tech/horizon.git horizon-src
+          git -C horizon-src checkout --detach "$HORIZON_REV"
+          echo "HORIZON_COMMIT=$(git -C horizon-src rev-parse HEAD)" >> "$GITHUB_ENV"
+      - name: Read Minecraft version pinned by Horizon
+        shell: bash
+        run: |
+          EXPECTED_MINECRAFT_VERSION="$(python -c 'import json; print(json.load(open("horizon-src/research-lock.json", encoding="utf-8"))["minecraft"]["version"])')"
+          if [[ -z "$EXPECTED_MINECRAFT_VERSION" ]]; then
+            echo "::error::Selected Horizon revision does not pin minecraft.version."
+            exit 1
+          fi
+          echo "EXPECTED_MINECRAFT_VERSION=$EXPECTED_MINECRAFT_VERSION" >> "$GITHUB_ENV"
       - name: Download Minecraft directly from Mojang
         if: ${{ inputs.minecraft_release_tag == '' }}
         env:
           VERSION: ${{ inputs.minecraft_version }}
+          EXPECTED_VERSION: ${{ env.EXPECTED_MINECRAFT_VERSION }}
         shell: bash
         run: |
           mkdir -p input/minecraft
-          python scripts/download_minecraft.py --version "$VERSION" --output input/minecraft/minecraft.zip
+          python scripts/download_minecraft.py --version "$VERSION" --expected-version "$EXPECTED_VERSION" --output input/minecraft/minecraft.zip
       - name: Download Minecraft game ZIP from legacy Release (optional)
         if: ${{ inputs.minecraft_release_tag != '' }}
         env:
@@ -160,14 +178,6 @@ jobs:
         run: |
           MINECRAFT_DIR="$(python scripts/extract_instance.py input/minecraft/minecraft.zip --destination input/extracted --print-root)"
           echo "minecraft_dir=$MINECRAFT_DIR" >> "$GITHUB_OUTPUT"
-      - name: Checkout selected Horizon revision
-        shell: bash
-        env:
-          HORIZON_REV: ${{ inputs.horizon_revision }}
-        run: |
-          git clone https://github.com/nguyenphuck2468-tech/horizon.git horizon-src
-          git -C horizon-src checkout --detach "$HORIZON_REV"
-          echo "HORIZON_COMMIT=$(git -C horizon-src rev-parse HEAD)" >> "$GITHUB_ENV"
       - name: Verify Minecraft version against selected Horizon lock
         shell: bash
         run: |

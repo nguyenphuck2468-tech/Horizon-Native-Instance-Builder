@@ -83,6 +83,32 @@ class MojangDownloadTests(unittest.TestCase):
                 self.assertIn("libraries/org/example/sample/1.0/sample-1.0.jar", names)
                 self.assertIn(f"assets/objects/{asset_sha[:2]}/{asset_sha}", names)
 
+    def test_version_metadata_is_preserved_byte_for_byte(self):
+        client = b"client"
+        client_sha = hashlib.sha1(client).hexdigest()
+        metadata_bytes = b'{ "id": "1.21.1", "downloads": {"client": {"url": "https://launcher.mojang.com/client.jar", "size": 6, "sha1": "' + client_sha.encode() + b'"}} }'
+        manifest = {"latest": {"release": "1.21.1", "snapshot": "1.21.1"}, "versions": [{"id": "1.21.1", "url": "https://piston-meta.mojang.com/version.json"}]}
+        payloads = {download_minecraft.MANIFEST_URL: json.dumps(manifest).encode(), "https://piston-meta.mojang.com/version.json": metadata_bytes}
+        def fake_read(url, *args, **kwargs): return payloads[url]
+        def fake_write(root, relative, url, size=None, sha1=None):
+            target = pathlib.Path(root) / relative
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_bytes(client)
+            return target
+        with tempfile.TemporaryDirectory() as temp:
+            output = pathlib.Path(temp) / "minecraft.zip"
+            with patch.object(download_minecraft, "_read_url", side_effect=fake_read), patch.object(download_minecraft, "_write_verified", side_effect=fake_write):
+                download_minecraft.download_game("1.21.1", output)
+            with zipfile.ZipFile(output) as archive:
+                self.assertEqual(archive.read("versions/1.21.1/1.21.1.json"), metadata_bytes)
+
+    def test_expected_horizon_version_is_checked_before_game_download(self):
+        manifest = {"latest": {"release": "1.21.1", "snapshot": "1.21.1"}, "versions": [{"id": "1.21.1", "url": "https://piston-meta.mojang.com/version.json"}]}
+        with patch.object(download_minecraft, "_read_url", return_value=json.dumps(manifest).encode()), patch.object(download_minecraft, "_download_version") as download:
+            with self.assertRaisesRegex(ValueError, "requires Minecraft 26.3"):
+                download_minecraft.download_game("latest-release", "unused.zip", expected_version="26.3")
+            download.assert_not_called()
+
     def test_failed_archive_write_preserves_previous_output(self):
         client = b"official-client-jar"
         client_sha = hashlib.sha1(client).hexdigest()
