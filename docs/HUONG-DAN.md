@@ -4,12 +4,21 @@ Builder hiện có thể **tự tải Minecraft trực tiếp từ Mojang**. B�
 
 ## 1. Builder tạo ra gì?
 
-Workflow tạo native client cho:
+Khi build thành công, workflow tạo **một gói ZIP cho từng nền tảng**, gom instance backup gốc và native client đã biên dịch vào cùng một file:
 
-- native-build-linux-x86_64: Linux 64-bit.
-- native-build-windows-x86_64: Windows 64-bit.
+- `horizon-instance-windows-x86_64`
+- `horizon-instance-linux-x86_64`
 
-Ngoài ra có artifact riêng giữ nguyên Horizon instance backup và log/báo cáo build. macOS chưa phải target đã xác minh.
+Bên trong mỗi ZIP:
+- `instance/instance.zip`: bản backup instance gốc, được giữ nguyên byte-for-byte.
+- `native/<target>/horizon-client[.exe]`: native client của đúng hệ điều hành.
+- `mods/*.hnmod`: các gói mod đầu vào để đối chiếu và lưu cùng bản build.
+- `build-manifest.json`: commit Horizon, SHA-256 và danh sách mod.
+- `README-INSTALL.txt`: hướng dẫn khôi phục instance và import native build.
+
+Đây là **gói phát hành kết hợp**, không phải một định dạng instance ZIP mới do Horizon Launcher tự nhận diện. Sau khi giải nén, cần khôi phục/import backup bằng luồng instance của Horizon rồi import native client bằng `horizon-launcher import-build ... --trust-unsigned`. Không cần biên dịch trên máy cá nhân.
+
+Nếu đã cung cấp .hnmod mà native-mod build thất bại, workflow sẽ dừng và không phát hành binary core-only dưới tên bản có mod.
 
 ## 2. Chuẩn bị đầu vào
 
