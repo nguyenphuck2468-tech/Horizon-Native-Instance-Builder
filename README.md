@@ -1,6 +1,6 @@
 # Horizon Native Instance Builder
 
-A GitHub Actions builder for Horizon native clients. It preserves the Horizon instance backup separately and obtains Minecraft game files directly from Mojang by default. Native mods are supplied as .hnmod bundles.
+A GitHub Actions builder for Horizon native clients. It preserves the Horizon instance backup separately and obtains Minecraft game files directly from Mojang by default. Native mod bundles (.hnmod) are optional: every run builds the unmodified Horizon core client, and supplied bundles add a separate modded build.
 
 **Start here:** [Vietnamese usage guide](docs/HUONG-DAN.md). For a local, dependency-free preflight interface, open [the guided build wizard](tools/builder-wizard.html) in a modern browser.
 
@@ -54,7 +54,7 @@ Open Actions → Build Horizon Native Instance → Run workflow.
 
 ## Import the result
 
-Download the platform-matching native-build-linux-x86_64 or native-build-windows-x86_64 artifact and import its client binary:
+Download the platform-matching native-build-linux-x86_64 or native-build-windows-x86_64 artifact. It contains `horizon-client-core` (the unmodified core) and `horizon-client` (the primary build; modded when bundles were supplied):
 
     horizon-launcher import-build <PATH-TO-horizon-client> --trust-unsigned
 
