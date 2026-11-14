@@ -28,14 +28,16 @@ The workflow fetches the current selected registry versions into input/mods-late
 The selected mod IDs are:
 
 - appleskin
-- basic_hud
+- hud_plus
 - fast_items
-- freecam_plus
-- freelook
+- freecam
+- keystrokes
+- minimap
 - fullbright_horizon
 - jade
 - jei
-- mod_menu
+- status_effect_hud
+- toggle_sprint
 - zoom
 
 A mod is omitted only when the official health report for the exact Nightly marks its newest registry version broken, or when its registry metadata does not target the configured game version. If the health report is stale or for another Horizon commit, the workflow fails closed rather than guessing.
