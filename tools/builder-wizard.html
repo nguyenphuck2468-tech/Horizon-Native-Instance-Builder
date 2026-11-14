@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Horizon Native Builder · Build wizard</title>
+<style>
+:root{color-scheme:dark;--bg:#0b0d12;--panel:#141923;--panel2:#1a2230;--line:#293345;--muted:#9aa8bb;--text:#edf3fb;--accent:#9b8cff;--good:#65d6a2;--warn:#f3bd69}
+*{box-sizing:border-box}body{margin:0;background:radial-gradient(900px 520px at 85% -10%,#29234a 0,transparent 65%),var(--bg);color:var(--text);font:15px/1.55 Inter,ui-sans-serif,system-ui,sans-serif}
+main{max-width:940px;margin:0 auto;padding:42px 22px 72px}.eyebrow{color:var(--accent);font-size:12px;font-weight:750;letter-spacing:.14em;text-transform:uppercase}
+h1{font-size:clamp(30px,5vw,48px);letter-spacing:-.045em;line-height:1.05;margin:10px 0}p{color:var(--muted);margin:8px 0 0}.steps{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin:28px 0}.step{border:1px solid var(--line);border-radius:14px;padding:12px;background:#111722;color:var(--muted)}.step b{display:block;color:var(--text);font-size:13px}.step.active{border-color:var(--accent);background:#1a1a31}
+.panel{background:linear-gradient(180deg,#171e2a,#121822);border:1px solid var(--line);border-radius:18px;padding:22px;margin:14px 0}.panel h2{font-size:18px;margin:0 0 5px;letter-spacing:-.02em}.hint{font-size:13px;color:var(--muted)}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}.field{display:block;border:1px dashed #46536a;border-radius:13px;padding:16px;background:#0e141e;cursor:pointer;min-height:120px}.field:hover{border-color:var(--accent)}.field strong{display:block;margin-bottom:5px}.field input{display:block;width:100%;margin-top:10px;color:var(--muted);font-size:13px}.status{display:flex;align-items:center;gap:9px;margin-top:9px;font-size:13px;color:var(--muted)}.dot{width:8px;height:8px;border-radius:50%;background:#637084}.dot.good{background:var(--good)}.dot.warn{background:var(--warn)}
+input[type=text]{width:100%;background:#0d131c;border:1px solid var(--line);border-radius:10px;padding:12px;color:var(--text);font:inherit;margin-top:7px}.row{margin:16px 0}.row label{font-size:13px;color:#c7d1df;font-weight:650}
+.actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:20px}button{border:0;border-radius:10px;padding:11px 16px;background:var(--accent);color:#100e1c;font-weight:750;cursor:pointer}button.secondary{background:#283347;color:var(--text)}button:disabled{opacity:.4;cursor:not-allowed}
+pre{white-space:pre-wrap;overflow-wrap:anywhere;background:#090e15;border:1px solid var(--line);border-radius:12px;padding:16px;color:#d5def0;font:12px/1.6 ui-monospace,monospace;min-height:82px}.notice{border-left:3px solid var(--warn);padding:10px 13px;background:#211d17;border-radius:0 10px 10px 0;color:#e7d6b8;font-size:13px}
+footer{font-size:12px;color:#748196;margin-top:24px}@media(max-width:680px){main{padding:28px 15px}.grid{grid-template-columns:1fr}.steps{grid-template-columns:1fr}.panel{padding:17px}}
+</style></head>
+<body><main>
+<div class="eyebrow">Horizon · Native Instance Builder</div><h1>Build your native instance.</h1>
+<p>A guided preflight for your Horizon backup, a Mojang Minecraft version and trusted native mods. This page runs locally in your browser; it does not upload files or start a build by itself.</p>
+<div class="steps"><div class="step active"><b>01 · Prepare inputs</b>Choose and check files</div><div class="step"><b>02 · Configure</b>Pin the source revision</div><div class="step"><b>03 · Dispatch</b>Run the GitHub workflow</div></div>
+<section class="panel"><h2>01 · Select your files</h2><p class="hint">The Horizon instance backup is uploaded separately. Minecraft game files are downloaded directly from Mojang by the workflow.</p>
+<div class="grid" style="margin-top:17px">
+<label class="field"><strong>Horizon instance backup</strong><span class="hint">Required · instance.zip / horizon.zip</span><input id="instance" type="file" accept=".zip,application/zip"><div class="status"><i class="dot" id="instanceDot"></i><span id="instanceStatus">No file selected</span></div></label>
+<div class="row"><label for="minecraftVersion">Minecraft version</label><input id="minecraftVersion" type="text" value="26.3"><div class="hint">Must match the minecraft.version pinned by the selected Horizon research-lock.json.</div></div>
+</div>
+<div class="row"><label>Trusted native mod bundles (.hnmod)</label><input id="mods" type="file" accept=".hnmod" multiple><div class="hint">Local preflight only: copy selected bundles into input/mods/ in your repository checkout and push that commit before dispatch. This page does not upload mod files.</div><div class="status"><i class="dot" id="modsDot"></i><span id="modsStatus">No native mods selected (optional)</span></div></div>
+<div class="notice">Native mods contain executable native code and are not sandboxed. Only select bundles whose source you have reviewed and trust.</div>
+</section>
+<section class="panel"><h2>02 · Configure the build</h2>
+<div class="row"><label for="revision">Horizon source revision</label><input id="revision" type="text" value="main"><div class="hint">Use a branch, tag or exact commit SHA. For reproducible builds, prefer a full commit SHA.</div></div>
+<div class="row"><label for="tag">Release tag containing the Horizon instance ZIP</label><input id="tag" type="text" placeholder="e.g. instance-backup-2026-11"></div>
+<div class="hint">Upload the selected backup as instance.zip to a Release in this repository. Minecraft files are fetched from Mojang; no Minecraft ZIP upload is needed. Keep large archives out of Git history.</div>
+</section>
+<section class="panel"><h2>03 · Build command</h2><p class="hint">After uploading instance.zip to the selected Release, copy and run this command in a terminal with GitHub CLI authenticated to this repository.</p>
+<pre id="command">Select the instance ZIP and complete the build settings to generate the command.</pre>
+<div class="actions"><button id="copy" disabled>Copy command</button><button class="secondary" id="reset">Reset</button></div>
+<div class="status"><i class="dot" id="readyDot"></i><span id="ready">Waiting for required inputs</span></div>
+</section>
+<footer>Local-only helper · No analytics · No dependencies · Linux x86_64 and Windows x86_64 workflow targets</footer>
+</main>
+<script>
+const $=id=>document.getElementById(id);
+const quote=s=>"'"+String(s).replace(/'/g,"'\\''")+"'";
+async function checkZip(file){if(!file)return false;const b=new Uint8Array(await file.slice(0,4).arrayBuffer());return b.length===4&&b[0]===0x50&&b[1]===0x4b&&[0x03,0x05,0x07].includes(b[2])}
+function size(n){if(n<1024*1024)return (n/1024).toFixed(1)+" KB";return (n/1024/1024).toFixed(1)+" MB"}
+async function refresh(){
+ const file=$("instance").files[0],dot=$("instanceDot"),status=$("instanceStatus");
+ let validZip=false;
+ if(file){validZip=await checkZip(file)&&file.size>0;dot.className="dot "+(validZip?"good":"warn");status.textContent=file.name+" · "+size(file.size)+(validZip?" · ZIP signature OK":" · invalid ZIP signature")}
+ else{dot.className="dot";status.textContent="No file selected"}
+ const mods=[...$("mods").files],modsValid=mods.every(f=>f.name.toLowerCase().endsWith(".hnmod")&&f.size>0);
+ $("modsDot").className="dot "+(mods.length&&modsValid?"good":"");
+ $("modsStatus").textContent=mods.length?(modsValid?mods.length+" bundle(s) selected":"One or more bundles are invalid"):"No native mods selected (optional)";
+ const rev=$("revision").value.trim(),tag=$("tag").value.trim(),version=$("minecraftVersion").value.trim();
+ const ready=validZip&&!!rev&&!!tag&&!!version&&modsValid;
+ $("readyDot").className="dot "+(ready?"good":"warn");
+ $("ready").textContent=ready?"Inputs look structurally ready. GitHub Actions performs full archive, Mojang hash and build validation.":"Choose a valid instance ZIP and complete the revision, Minecraft version and Release tag.";
+ if(ready){
+  const cmd="gh workflow run build.yml --ref main \\\n  -f horizon_revision="+quote(rev)+" \\\n  -f instance_release_tag="+quote(tag)+" \\\n  -f instance_asset_name='instance.zip' \\\n  -f minecraft_version="+quote(version);
+  $("command").textContent="Upload the selected backup as instance.zip to Release "+tag+". The workflow downloads Minecraft "+version+" from Mojang.\n\n"+cmd;
+  $("copy").disabled=false;
+ }else{$("command").textContent="Select a valid instance ZIP and complete all required settings.";$("copy").disabled=true}
+}
+["instance","mods"].forEach(id=>$(id).addEventListener("change",refresh));
+["revision","tag","minecraftVersion"].forEach(id=>$(id).addEventListener("input",refresh));
+$("copy").addEventListener("click",async()=>{await navigator.clipboard.writeText($("command").textContent);$("copy").textContent="Copied";setTimeout(()=>$("copy").textContent="Copy command",1300)});
+$("reset").addEventListener("click",()=>{$("instance").value="";$("mods").value="";$("revision").value="main";$("tag").value="";$("minecraftVersion").value="26.3";refresh()});
+refresh();
+</script></body></html>

@@ -2,7 +2,7 @@
 
 A GitHub Actions builder for Horizon native clients. It preserves the Horizon instance backup separately and obtains Minecraft game files directly from Mojang by default. Native mods are supplied as .hnmod bundles.
 
-**Start here:** [Vietnamese usage guide](docs/HUONG-DAN.md).
+**Start here:** [Vietnamese usage guide](docs/HUONG-DAN.md). For a local, dependency-free preflight interface, open [the guided build wizard](tools/builder-wizard.html) in a modern browser.
 
 ## Inputs
 
@@ -36,9 +36,9 @@ For Linux x86_64 and Windows x86_64, the workflow:
 
 1. Validates the Horizon instance archive and trusted .hnmod bundles.
 2. Downloads the selected Minecraft version from Mojang independently on each runner (or retrieves the optional private/prebuilt ZIP), then validates the client JAR, asset index and assets.
-3. Checks out the selected revision of nguyenphuck2468-tech/horizon and builds its launcher CLI.
+3. Resolves the selected Horizon ref to one immutable commit before the platform jobs start, then checks out that exact commit for both targets and records its SHA in each build report.
 4. Installs the latest published Horizon base, prepares it from the downloaded Minecraft files, and invokes horizon-launcher native-build.
-5. Publishes the actual horizon-client / horizon-client.exe binary, build logs and the original Horizon instance ZIP as separate artifacts.
+5. Publishes the actual horizon-client / horizon-client.exe binary and build reports, then runs a cross-platform verification job that checks both executable formats, hashes, and matching Horizon commit IDs before publishing a VERIFIED report. The original Horizon instance ZIP is preserved as a separate artifact.
 
 The workflow does not sign in to a Microsoft/Minecraft account. Mojang's public version metadata and game-file endpoints are used; access to the game and compliance with the Minecraft EULA remain the user's responsibility.
 
