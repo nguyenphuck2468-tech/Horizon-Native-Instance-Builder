@@ -23,14 +23,12 @@ DEFAULT_IDS = (
     "hud_plus",
     "fast_items",
     "freecam",
-    "keystrokes",
-    "minimap",
     "fullbright_horizon",
     "jade",
     "jei",
-    "status_effect_hud",
-    "toggle_sprint",
     "zoom",
+    "enchantmenthints",
+    "inventory_profiles",
 )
 SHA256 = re.compile(r"^[0-9a-f]{64}$")
 MAX_FILE_BYTES = 64 * 1024 * 1024
