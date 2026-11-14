@@ -17,17 +17,22 @@ on:
         required: true
         default: "instance.zip"
         type: string
-      minecraft_release_tag:
-        description: "Required release tag containing a full Minecraft game-directory ZIP (not a Horizon backup)"
+      minecraft_version:
+        description: "Official Mojang version ID, latest-release, or latest-snapshot"
         required: true
+        default: "26.3"
+        type: string
+      minecraft_release_tag:
+        description: "Optional legacy Release tag containing a full Minecraft game-directory ZIP; leave blank to download from Mojang"
+        required: false
         type: string
       minecraft_source_repository:
-        description: "Repository hosting the Minecraft Release asset; use a private repository to avoid publishing game files"
+        description: "Repository hosting the optional prebuilt Minecraft ZIP; use a private repository"
         required: false
         default: ""
         type: string
       minecraft_asset_name:
-        description: "Minecraft game ZIP asset filename"
+        description: "Minecraft game ZIP asset filename for the optional legacy path"
         required: true
         default: "minecraft.zip"
         type: string
@@ -73,39 +78,15 @@ jobs:
               exit 1
             fi
           fi
-      - name: Download Minecraft game ZIP from Release
-        env:
-          GH_TOKEN: ${{ secrets.MINECRAFT_INPUTS_TOKEN || github.token }}
-          MINECRAFT_INPUTS_TOKEN: ${{ secrets.MINECRAFT_INPUTS_TOKEN }}
-          SOURCE_REPOSITORY: ${{ inputs.minecraft_source_repository }}
-          TAG: ${{ inputs.minecraft_release_tag }}
-          ASSET: ${{ inputs.minecraft_asset_name }}
-        run: |
-          SOURCE_REPOSITORY="${SOURCE_REPOSITORY:-$GITHUB_REPOSITORY}"
-          if [[ "$SOURCE_REPOSITORY" != "$GITHUB_REPOSITORY" && -z "$MINECRAFT_INPUTS_TOKEN" ]]; then
-            echo "::error::A private/external Minecraft source repository requires the MINECRAFT_INPUTS_TOKEN Actions secret with read-only Contents access."
-            exit 1
-          fi
-          temp_dir="$(mktemp -d)"
-          gh release download "$TAG" --repo "$SOURCE_REPOSITORY" --pattern "$ASSET" --dir "$temp_dir"
-          cp "$temp_dir/$ASSET" input/minecraft/minecraft.zip
-      - name: Require a separate full Minecraft game ZIP
-        run: |
-          if [ ! -f input/minecraft/minecraft.zip ]; then
-            echo "::error::The Horizon instance backup is not a Minecraft game install. Add input/minecraft/minecraft.zip or provide minecraft_release_tag with a full Minecraft game-directory ZIP."
-            ls -la input/minecraft
-            exit 1
-          fi
       - name: Test archive validation and extraction
         run: python -m unittest discover -s tests -v
-      - name: Validate Horizon instance, Minecraft game ZIP and native mods
-        run: python scripts/prepare.py --minecraft input/minecraft/minecraft.zip
+      - name: Validate Horizon instance and native mods
+        run: python scripts/prepare.py
       - uses: actions/upload-artifact@v4
         with:
           name: validated-inputs
           path: |
             input/instance/instance.zip
-            input/minecraft/minecraft.zip
             input/mods/*.hnmod
             build-report/input-manifest.json
           if-no-files-found: error
@@ -144,12 +125,6 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y build-essential pkg-config libssl-dev cmake libxkbcommon-dev libwayland-dev libx11-dev libvulkan-dev libasound2-dev
-      - name: Extract the supplied Minecraft game files
-        id: instance
-        shell: bash
-        run: |
-          MINECRAFT_DIR="$(python scripts/extract_instance.py input/minecraft/minecraft.zip --destination input/extracted --print-root)"
-          echo "minecraft_dir=$MINECRAFT_DIR" >> "$GITHUB_OUTPUT"
       - name: Checkout selected Horizon revision
         shell: bash
         env:
@@ -158,6 +133,56 @@ jobs:
           git clone https://github.com/nguyenphuck2468-tech/horizon.git horizon-src
           git -C horizon-src checkout --detach "$HORIZON_REV"
           echo "HORIZON_COMMIT=$(git -C horizon-src rev-parse HEAD)" >> "$GITHUB_ENV"
+      - name: Read Minecraft version pinned by Horizon
+        shell: bash
+        run: |
+          EXPECTED_MINECRAFT_VERSION="$(python -c 'import json; print(json.load(open("horizon-src/research-lock.json", encoding="utf-8"))["minecraft"]["version"])')"
+          if [[ -z "$EXPECTED_MINECRAFT_VERSION" ]]; then
+            echo "::error::Selected Horizon revision does not pin minecraft.version."
+            exit 1
+          fi
+          echo "EXPECTED_MINECRAFT_VERSION=$EXPECTED_MINECRAFT_VERSION" >> "$GITHUB_ENV"
+      - name: Download Minecraft directly from Mojang
+        if: ${{ inputs.minecraft_release_tag == '' }}
+        env:
+          VERSION: ${{ inputs.minecraft_version }}
+          EXPECTED_VERSION: ${{ env.EXPECTED_MINECRAFT_VERSION }}
+        shell: bash
+        run: |
+          mkdir -p input/minecraft
+          python scripts/download_minecraft.py --version "$VERSION" --expected-version "$EXPECTED_VERSION" --output input/minecraft/minecraft.zip
+      - name: Download Minecraft game ZIP from legacy Release (optional)
+        if: ${{ inputs.minecraft_release_tag != '' }}
+        env:
+          GH_TOKEN: ${{ secrets.MINECRAFT_INPUTS_TOKEN || github.token }}
+          MINECRAFT_INPUTS_TOKEN: ${{ secrets.MINECRAFT_INPUTS_TOKEN }}
+          SOURCE_REPOSITORY: ${{ inputs.minecraft_source_repository }}
+          TAG: ${{ inputs.minecraft_release_tag }}
+          ASSET: ${{ inputs.minecraft_asset_name }}
+        shell: bash
+        run: |
+          SOURCE_REPOSITORY="${SOURCE_REPOSITORY:-$GITHUB_REPOSITORY}"
+          if [[ "$SOURCE_REPOSITORY" != "$GITHUB_REPOSITORY" && -z "$MINECRAFT_INPUTS_TOKEN" ]]; then
+            echo "::error::A private/external Minecraft source repository requires the MINECRAFT_INPUTS_TOKEN Actions secret with read-only Contents access."
+            exit 1
+          fi
+          mkdir -p input/minecraft
+          temp_dir="$(mktemp -d)"
+          gh release download "$TAG" --repo "$SOURCE_REPOSITORY" --pattern "$ASSET" --dir "$temp_dir"
+          cp "$temp_dir/$ASSET" input/minecraft/minecraft.zip
+      - name: Validate downloaded Minecraft game files
+        run: python scripts/prepare.py --minecraft input/minecraft/minecraft.zip
+      - name: Extract the supplied Minecraft game files
+        id: instance
+        shell: bash
+        run: |
+          MINECRAFT_DIR="$(python scripts/extract_instance.py input/minecraft/minecraft.zip --destination input/extracted --print-root)"
+          echo "minecraft_dir=$MINECRAFT_DIR" >> "$GITHUB_OUTPUT"
+      - name: Verify Minecraft version against selected Horizon lock
+        shell: bash
+        run: |
+          MINECRAFT_VERSION="$(python scripts/validate_horizon_version.py --lock horizon-src/research-lock.json --minecraft-zip input/minecraft/minecraft.zip --print-version)"
+          echo "MINECRAFT_VERSION=$MINECRAFT_VERSION" >> "$GITHUB_ENV"
       - name: Build Horizon launcher CLI
         working-directory: horizon-src
         shell: bash
@@ -192,7 +217,7 @@ jobs:
           TARGET: ${{ matrix.target }}
         run: |
           mkdir -p "native-runtime" "build-report/$TARGET"
-          printf 'Horizon commit: %s\nTarget: %s\nRunner: %s\n' "$HORIZON_COMMIT" "$TARGET" "$RUNNER_OS" > "build-report/$TARGET/build.txt"
+          printf 'Horizon commit: %s\nMinecraft version: %s\nTarget: %s\nRunner: %s\n' "$HORIZON_COMMIT" "$MINECRAFT_VERSION" "$TARGET" "$RUNNER_OS" > "build-report/$TARGET/build.txt"
           if [[ -f native-build.log ]]; then
             cp native-build.log "build-report/$TARGET/"
           fi

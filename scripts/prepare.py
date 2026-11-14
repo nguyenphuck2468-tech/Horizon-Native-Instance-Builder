@@ -158,6 +158,31 @@ def validate_minecraft_archive(path, names):
             and name.endswith(".json")
         )
         matching_indexes = set()
+        metadata_cache = {}
+
+        def resolve_field(version_id, field, visiting=None):
+            if visiting is None:
+                visiting = set()
+            if version_id in visiting:
+                raise ValueError(f"Minecraft version inheritance cycle at {version_id}.")
+            if not isinstance(version_id, str) or not version_id or "/" in version_id or chr(92) in version_id or version_id in {".", ".."}:
+                raise ValueError(f"Invalid inherited Minecraft version ID: {version_id!r}.")
+            if version_id not in metadata_cache:
+                relative = f"versions/{version_id}/{version_id}.json"
+                metadata_cache[version_id] = read_json(relative, 4 * 1024 * 1024)
+                if metadata_cache[version_id].get("id") not in (None, version_id):
+                    raise ValueError(f"Minecraft metadata ID mismatch: {relative}.")
+            current = metadata_cache[version_id]
+            value = current
+            for key in field.split("."):
+                value = value.get(key) if isinstance(value, dict) else None
+            if value:
+                return version_id, value
+            parent = current.get("inheritsFrom")
+            if parent:
+                return resolve_field(parent, field, visiting | {version_id})
+            return None, None
+
         for version_file in version_files:
             relative_version = version_file[len(prefix):]
             version_parts = pathlib.PurePosixPath(relative_version).parts
@@ -167,37 +192,27 @@ def validate_minecraft_archive(path, names):
             if not isinstance(metadata, dict):
                 raise ValueError(f"Minecraft version metadata is not an object: {relative_version}.")
 
-            # The client JAR is a required input to Horizon's native preparation.
-            # Validate it against Mojang's per-version size and SHA-1 metadata so
-            # a metadata-only or substituted client archive cannot pass preflight.
-            downloads = metadata.get("downloads")
-            client = downloads.get("client") if isinstance(downloads, dict) else None
+            # Client JAR and asset index may be inherited from a parent version.
+            version_id = version_parts[1]
+            downloads_id, client = resolve_field(version_id, "downloads.client")
             client_sha1 = client.get("sha1") if isinstance(client, dict) else None
             client_size = client.get("size") if isinstance(client, dict) else None
             if (not isinstance(client_sha1, str) or len(client_sha1) != 40
                     or any(c not in "0123456789abcdefABCDEF" for c in client_sha1)
                     or not isinstance(client_size, int) or client_size <= 0):
-                raise ValueError(
-                    f"Minecraft version metadata has invalid client JAR metadata: {relative_version}."
-                )
-            version_id = version_parts[1]
-            client_path = f"versions/{version_id}/{version_id}.jar"
+                raise ValueError(f"Minecraft version metadata has invalid or missing inherited client JAR metadata: {relative_version}.")
+            client_path = f"versions/{downloads_id}/{downloads_id}.jar"
             client_info = entries.get(prefix + client_path)
             if client_info is None or client_info.file_size != client_size:
-                raise ValueError(
-                    f"Minecraft ZIP is missing the correctly sized client JAR: {client_path}."
-                )
+                raise ValueError(f"Minecraft ZIP is missing the correctly sized client JAR: {client_path}.")
             client_hash = hashlib.sha1()
             with archive.open(client_info) as client_file:
                 for chunk in iter(lambda: client_file.read(1024 * 1024), b""):
                     client_hash.update(chunk)
             if client_hash.hexdigest() != client_sha1.lower():
-                raise ValueError(
-                    f"Minecraft client JAR has a SHA-1 mismatch: {client_path} "
-                    f"(expected {client_sha1.lower()}, got {client_hash.hexdigest()})."
-                )
+                raise ValueError(f"Minecraft client JAR has a SHA-1 mismatch: {client_path} (expected {client_sha1.lower()}, got {client_hash.hexdigest()}).")
 
-            asset_index = metadata.get("assetIndex")
+            _, asset_index = resolve_field(version_id, "assetIndex")
             index_id = asset_index.get("id") if isinstance(asset_index, dict) else None
             if (not isinstance(index_id, str) or not index_id
                     or "/" in index_id or "\\" in index_id or index_id in {".", ".."}):
