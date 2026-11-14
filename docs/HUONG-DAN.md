@@ -29,14 +29,16 @@ Khi chạy, workflow sẽ:
 Danh sách mod được cập nhật:
 
 - AppleSkin
-- The Basic HUD
+- HUD+ (thay thế Basic HUD)
 - Fast Items
-- Freecam+
-- Freelook
+- Freecam (bản thay thế)
+- Keystrokes
+- Minimap
 - Fullbright
 - Jade
 - JEI
-- Mod Menu
+- Status Effect HUD
+- Toggle Sprint
 - Zoom
 
 Không phải lúc nào cũng có thể dùng cả 10 mod trên Nightly mới nhất. Nếu một mod chưa tương thích, báo cáo registry-mods.json sẽ ghi rõ lý do và mod đó không được ép cài. Các mod còn lại vẫn được build nếu bộ mod được chọn hợp lệ.
