@@ -150,6 +150,15 @@ def verify_artifacts(inputs: Path, linux: Path, windows: Path) -> dict:
             "sha256": digest,
             "horizon_commit": actual_commit,
         }
+        core_name = "horizon-client-core.exe" if target == "windows-x86_64" else "horizon-client-core"
+        core_binary = root / "native-runtime" / core_name
+        if core_binary.is_file():
+            core_size, core_digest = _inspect_binary(core_binary, target)
+            verified[target]["core_client"] = {
+                "client": core_name,
+                "bytes": core_size,
+                "sha256": core_digest,
+            }
 
     return {
         "schema": 1,
