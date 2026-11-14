@@ -93,6 +93,14 @@ jobs:
         run: python scripts/prepare.py
       - name: Verify real .hnmod bundle extraction layout
         run: python scripts/extract_native_mods.py input/mods --destination build-report/validated-native-mods
+      - name: Inspect the exact instance and all supplied .hnmod packages (read-only)
+        run: python scripts/inspect_inputs.py --output build-report/input-inspection.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: input-inspection-report
+          path: build-report/input-inspection.json
+          if-no-files-found: error
+          retention-days: 14
       - name: Resolve the Horizon revision once for every platform
         env:
           HORIZON_REV: ${{ inputs.horizon_revision || 'main' }}
